@@ -1,0 +1,8 @@
+# Global app config (non-secret). Secrets (API keys, broker tokens) stay in .env.
+
+broker:
+  provider: dhan
+  # Optional per-provider options (no credentials here)
+  # dhan:
+  #   request_timeout: 30
+  #   rate_limit_per_sec: 5

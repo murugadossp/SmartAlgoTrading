@@ -1,23 +1,25 @@
-# AI-Powered Multi-Algo Trading for Indian Market (Dhan API + LLM)
+# AI-Powered Multi-Algo Trading for Indian Market (Broker API + LLM)
+
+Broker/market data provider abstraction; starting with Dhan, extensible to other providers.
 
 ## Goal
 
 Build a system where:
 
-1. **Three user flows**: (a) **Flow 1 — Portfolio Mode** with two options: **New portfolio** (amount → run algos with sizing) and **Existing portfolio feedback** (upload → analyze → feedback and **traditional rebalancing**); (b) **Flow 2 — Explore algos** (filter Stocks/F&O, cards → overview + stocks table); (c) **Flow 3 — Learning cards** (educational content).
+1. **Three user flows**: (a) **Flow 1 — Portfolio / Investment** with an **investment-level** option (multi-asset: equity, debt, MF, etc.) and **stocks deep-dive**; plus **New portfolio** (amount → run algos) and **Existing portfolio feedback** (upload → analyze → rebalancing); (b) **Flow 2 — Explore algos** (filter Stocks/F&O, cards → overview + stocks table); (c) **Flow 3 — Learning cards** (educational content).
 2. **Multiple solid algos** (expandable) under filterable **Stocks** and **F&O**; each algo as a card; on click → strategy overview + stocks table.
-3. **Backend**: **FastAPI (Python)**; **Frontend**: **React**. Shared pipeline (Dhan, news, LLM) plus traditional rebalancing logic for existing portfolio.
+3. **Backend**: **FastAPI (Python)**; **Frontend**: **React**. Shared pipeline (broker/market data, news, LLM) plus traditional rebalancing logic for existing portfolio.
 
 ---
 
 ## Three User Flows
 
-### Flow 1: Portfolio Mode (two options)
+### Flow 1: Portfolio / Investment (evolved)
 
-- **Option 1 — New portfolio**: User enters total capital (e.g. 1 L). Select algos and allocation → run algos with portfolio-aware sizing → results table (symbol, suggestion, confidence, suggested quantity/amount).
-- **Option 2 — Existing portfolio feedback**: User uploads current portfolio (CSV/Excel). Backend analyzes (total value, sector mix, concentration, risk) → feedback (summary, suggestions). Then **traditional rebalancing** (target allocation, rebalancing bands, calendar rebalancing) → current vs target weights, suggested buy/sell. No algo run.
+- **Investment (high-level)**: User can provide portfolio **across asset classes** (e.g. equity, debt, mutual funds, gold, cash). System shows **allocation by asset class**; user can run **rebalancing** with target by asset class (e.g. 60% equity / 40% debt). From there, user can **deep-dive into stocks** (equity slice) to run algos or upload/analyze direct equity.
+- **Stocks-only path**: **New portfolio** — enter capital (e.g. 1 L), select algos → run algos with sizing → results table. **Existing portfolio feedback** — upload stocks (CSV/Excel) → analyze → feedback and **traditional rebalancing** (target allocation, bands, calendar) → current vs target, suggested buy/sell. No algo run on existing-portfolio path.
 
-**UI**: Portfolio Mode with two choices: **New portfolio** | **Existing portfolio**.
+**UI**: Portfolio landing with **Investment (multi-asset)** | **Stocks only** (New portfolio | Existing portfolio). From Investment view, link to **Deep-dive: Equity (stocks)** for algo run and stock-level analysis.
 
 ### Flow 2: Explore algos
 
@@ -29,11 +31,12 @@ Build a system where:
 
 ---
 
-## Portfolio Mode — two options (Flow 1)
+## Portfolio / Investment (Flow 1)
 
-- **New portfolio**: Enter capital in ₹; position sizing (5–10% per equity); risk per trade (1–2% of portfolio); run selected algos → results with suggested quantity/amount.
-- **Existing portfolio feedback**: Upload CSV/Excel → parse → analyze (total value, sector mix, concentration) → feedback. Apply **traditional rebalancing** (target allocation, ±5% bands, calendar) → current vs target weights, suggested buy/sell.
-- **Use of portfolio size** (New portfolio): Position sizing; risk per trade; capital allocation across algos; max open positions.
+- **Investment-level**: User enters or uploads portfolio by **asset class** (equity, debt, mutual_fund, gold, cash). System returns total value and **allocation by asset class**. Rebalancing at asset-class level (e.g. equity 60%, debt 40%) → current vs target, suggested moves. **Deep-dive: Stocks** uses the equity slice for algo run or stock-level upload/feedback.
+- **New portfolio (stocks)**: Enter capital in ₹ (or use equity slice from investment view); position sizing (5–10% per equity); run selected algos → results with suggested quantity/amount.
+- **Existing portfolio (stocks)**: Upload CSV/Excel (stocks) → parse → analyze → feedback. **Traditional rebalancing** (target allocation, ±5% bands, calendar) → current vs target weights, suggested buy/sell. Can apply to equity slice when coming from investment view.
+- **Use of portfolio size**: Position sizing; risk per trade; capital allocation across algos; max open positions. Amount can be total equity or direct-stocks value from investment view.
 
 ---
 
@@ -53,18 +56,18 @@ Build a system where:
 
 ## High-Level Architecture
 
-- **Shared data**: Dhan API (LTP, OHLC, options chain), News (web search), Fundamentals (optional).
+- **Shared data**: Broker API (e.g. Dhan: LTP, OHLC, options chain), News (web search), Fundamentals (optional).
 - **Analysis**: Technical indicators, sentiment, LLM synthesis → confidence (0–100) + suggestion per algo/symbol.
 - **Portfolio**: New portfolio → sizing → run algos → results; Existing portfolio → upload → analyze → rebalance (traditional methods).
-- **Execution**: Optional; Dhan place_order with dry-run first.
+- **Execution**: Optional; broker place_order (e.g. Dhan), dry-run first.
 
 ---
 
 ## Technical Stack
 
-- **Backend**: FastAPI (Python 3.10+). APIs: portfolio run/upload/rebalance, algos list/detail/refresh, learning cards.
+- **Backend**: FastAPI (Python 3.12). APIs: portfolio run/upload/rebalance, algos list/detail/refresh, learning cards.
 - **Frontend**: React. Portfolio Mode (2 options), Explore algos (filter, cards, detail), Learning cards.
-- **Dhan**: `dhanhq` client; LTP, OHLC, options chain; place_order for execution.
+- **Broker**: Provider-agnostic; first implementation Dhan (`dhanhq` client): LTP, OHLC, options chain, place_order for execution.
 - **News**: Web search (Serper/Google/Bing); optional PressMonitor, StockGeist.
 - **LLM / Agents**: **AGNO framework** (Agno) for agents; **Pydantic** for JSON response design (structured output). **BaseAgent** takes **global config** from a dedicated **config module** and supports **per-agent overrides**. Each agent in a **separate folder**: **prompts** from **.md** (e.g. `system_instructions.md`), **other info** (model, temperature, params) from **agent-specific config.yaml**.
 - **Config**: Dedicated **config module** (global app + global agent defaults); env and YAML for watchlists, algo allocation, API keys.
@@ -81,4 +84,4 @@ Build a system where:
 
 ## Summary
 
-Three flows: **Flow 1 Portfolio Mode** (new portfolio or existing portfolio with feedback and traditional rebalancing), **Flow 2 Explore algos**, **Flow 3 Learning cards**; **FastAPI** backend and **React** frontend for the Indian market using Dhan and AI/LLM.
+Three flows: **Flow 1 Portfolio / Investment** (optional investment-level view across asset classes—equity, debt, MF, etc.—with allocation and rebalancing; **stocks deep-dive** for algo run and stock-level feedback; or stocks-only path as today), **Flow 2 Explore algos**, **Flow 3 Learning cards**; **FastAPI** backend and **React** frontend for the Indian market using broker/market data (starting with Dhan) and AI/LLM. See [investment-level-plan.md](investment-level-plan.md) for the investment-level and stocks deep-dive detail.

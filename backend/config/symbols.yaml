@@ -1,0 +1,8 @@
+# Optional: map symbol (watchlist name) -> broker security_id (e.g. Dhan numeric ID).
+# If a symbol is missing, the market data service uses the symbol as-is when calling the broker.
+# Populate with real security_id from your broker for live data.
+symbol_to_security_id: {}
+# Example:
+# symbol_to_security_id:
+#   RELIANCE: "12345"
+#   TCS: "67890"

@@ -1,6 +1,6 @@
 # Smart Algo Trading — Backend
 
-FastAPI backend for the Smart Algo Trading system (Indian market, Dhan API, AI/LLM).
+FastAPI backend for the Smart Algo Trading system (Indian market, broker/market data and AI/LLM).
 
 ## Responsibilities
 
@@ -10,18 +10,15 @@ FastAPI backend for the Smart Algo Trading system (Indian market, Dhan API, AI/L
 
 ## Tech Stack
 
-- **Python 3.14**
+- **Python 3.12**
 - FastAPI
-- Dhan: `dhanhq` client (market data, optional orders)
+- Broker/market data: first implementation Dhan (`dhanhq` client) for market data and optional orders
 - LLM: OpenAI / Anthropic / local (structured JSON output)
 - News: Web search API (e.g. Serper, Google, Bing)
-- **Package manager**: **uv** (create venv and install all Python packages)
 
 ## Setup
 
-**Python**: 3.11+ recommended (3.14 when Pydantic/FastAPI support it). Use a venv.
-
-**Option A — Local venv (recommended for now):**
+**Python 3.12** and a virtual env are required.
 
 ```bash
 cd backend
@@ -30,29 +27,23 @@ source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
 ```
 
-**Option B — uv + external venv** (see [../docs/setup.md](../docs/setup.md)):
+Optional: use **uv** to create the venv and install deps: `uv venv .venv --python 3.12` then `uv pip install -r requirements.txt`.
 
-- Venv path: `/Users/murugadosssp/py_venv/SmartAlgoTrading` (Python 3.14 when ecosystem is ready)
-- From backend: `uv pip install -r requirements.txt` (with that venv activated)
+## Configuration
 
-On Windows, activate with: `.\Users\murugadosssp\py_venv\SmartAlgoTrading\Scripts\activate` (adjust path as needed).
+**Split:** Non-secret options (e.g. broker provider, timeouts) live in **`backend/config/config.yaml`**. Secrets (API keys, broker tokens) live in **`.env`** only and must not be committed.
 
-**Use uv for all Python package operations** (add/remove/install): e.g. `uv pip install <package>`, `uv pip install -r requirements.txt`.
-
-## Environment
-
-Set (e.g. in `.env` or shell):
-
-- `DHAN_ACCESS_TOKEN`, `DHAN_CLIENT_ID`: Dhan API credentials
-- `OPENAI_API_KEY` or equivalent: LLM API key
-- News search API key (if used)
-- Optional: `CONFIG_PATH` for YAML config
+- **config.yaml**: `broker.provider` (e.g. `dhan`), optional per-provider options. See `backend/config/config.yaml`.
+- **.env**: `DHAN_ACCESS_TOKEN`, `DHAN_CLIENT_ID`, `OPENAI_API_KEY`, `SERPER_API_KEY`, etc. See `.env.example`.
+- **CONFIG_PATH** (optional): Override path to config directory or file; default is `backend/config/config.yaml`.
 
 ## Run
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+Or from repo root: `./start-dev.sh` to start both backend and frontend.
 
 API docs: `http://localhost:8000/docs`
 

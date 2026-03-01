@@ -1,5 +1,5 @@
-# Smart Algo Trading — Backend (use uv to install: uv pip install -r requirements.txt)
-# Python 3.14; venv: /Users/murugadosssp/py_venv/SmartAlgoTrading
+# Smart Algo Trading — Backend
+# Python 3.12; venv: backend/.venv (python3.12 -m venv .venv)
 
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
@@ -7,3 +7,6 @@ pydantic>=2.0
 pydantic-settings>=2.0
 python-multipart>=0.0.9
 pyyaml>=6.0
+dhanhq>=0.1.0
+openai>=1.0.0
+openpyxl>=3.1.0

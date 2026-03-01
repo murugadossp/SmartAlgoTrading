@@ -15,7 +15,7 @@ SmartAlgoTrading/
 └── docs/             # plan.md, requirements.md, design.md, tasks.md
 ```
 
-- **backend**: All server-side logic, Dhan client, algos, portfolio analysis, rebalancing, LLM integration, learning content.
+- **backend**: All server-side logic, broker/market data client (Dhan initially), algos, portfolio analysis, rebalancing, LLM integration, learning content.
 - **frontend**: SPA (React) consuming backend REST API; three main flows: Portfolio Mode, Explore algos, Learning cards.
 - **docs**: Single source of truth for plan, requirements, design, and tasks.
 
@@ -39,7 +39,7 @@ flowchart TB
     Learning["Learning: list cards, get card"]
   end
   subgraph external [External]
-    Dhan[Dhan API]
+    Broker["Broker / Market API"]
     News["News / Web search"]
     LLM[LLM API]
   end
@@ -49,9 +49,9 @@ flowchart TB
   R1 --> Portfolio
   R2 --> Algos
   R3 --> Learning
-  Portfolio --> Dhan
+  Portfolio --> Broker
   Portfolio --> LLM
-  Algos --> Dhan
+  Algos --> Broker
   Algos --> News
   Algos --> LLM
 ```
@@ -60,9 +60,11 @@ flowchart TB
 
 | Flow  | Frontend route/section | Backend routers      | Main operations                          |
 |-------|------------------------|----------------------|------------------------------------------|
-| Flow 1 | Portfolio Mode         | `/portfolio/*`       | run, upload, analyze, rebalance         |
+| Flow 1 | Portfolio / Investment | `/portfolio/*`       | investment (multi-asset), allocation, rebalance; run, upload, analyze (stocks path / deep-dive) |
 | Flow 2 | Explore algos          | `/algos/*`           | list (by segment), detail, refresh       |
 | Flow 3 | Learning               | `/learning/*`        | list cards, get card by id               |
+
+**Investment-level**: User can provide portfolio across asset classes (equity, debt, mutual_fund, gold, cash); system returns allocation by asset class; rebalancing at asset-class level; **deep-dive: stocks** (equity slice) uses existing run/upload/analyze flows. See [investment-level-plan.md](investment-level-plan.md).
 
 ---
 
@@ -70,13 +72,13 @@ flowchart TB
 
 ### 2.1 Technology Stack
 
-- **Runtime**: Python 3.14; virtual env at `/Users/murugadosssp/py_venv/SmartAlgoTrading` (by project name); **uv** for venv creation and all package installation. See [setup.md](setup.md) for full details.
+- **Runtime**: Python 3.12; virtual env at `backend/.venv` (recommended). See [setup.md](setup.md) for full details.
 - **Framework**: FastAPI
 - **HTTP**: REST; JSON request/response
-- **Dhan**: Official `dhanhq` client
+- **Broker / market data**: Provider-agnostic interface; first implementation: Dhan (official `dhanhq` client).
 - **News**: HTTP client + Serper/Google/Bing API (or similar)
 - **LLM**: OpenAI SDK or Anthropic/local HTTP client; structured output (JSON)
-- **Config**: Pydantic settings from env; optional `config.yaml` for watchlists, allocation defaults
+- **Config**: **Secrets** (broker tokens, API keys) in **env only**. **Non-secret options** (e.g. `broker.provider`) in global `backend/config/config.yaml`; optional YAML for watchlists, algo metadata (`config/algos.yaml`).
 - **Agents**: AGNO framework (Agno) for LLM agents; Pydantic for structured JSON response design; BaseAgent pattern with global config and per-agent override (see §2.2.1).
 
 ### 2.2.1 AGNO framework, BaseAgent pattern, and agent layout
@@ -96,7 +98,7 @@ The backend uses the **AGNO framework** (Agno) for AI/LLM agents and **Pydantic*
 - **Config module**: Configuration is kept in a **dedicated config module** (e.g. `app/config/` or `app/agents/config.py`), separate from business logic. It exposes:
   - **Global agent config**: default model id, provider, temperature, max_tokens, etc., used by BaseAgent when no override is set.
   - **Optional central agent overrides**: in the same global file (or a dedicated `agents.yaml`), a section that lists **agent name** and **override params** (model, temperature, etc.) per agent. Use this when you want one place to see and edit all agent settings.
-  - **App-level settings**: env-based (API keys, Dhan, feature flags) and optional YAML (watchlists, algo metadata).
+  - **App-level settings**: env-based (API keys, broker e.g. Dhan, feature flags) and optional YAML (watchlists, algo metadata).
 
 **Where overrides live (model, temperature, etc.)**
 
@@ -210,7 +212,7 @@ backend/
 │   │   ├── portfolio/       # run_algos, parse_upload, analyze, rebalance
 │   │   ├── algos/          # list_algos, get_algo_detail, refresh_algo
 │   │   └── learning/       # list_cards, get_card
-│   ├── data/               # Dhan client, market data fetchers, news fetcher
+│   ├── data/               # Broker factory (get_broker_client), base protocol, Dhan implementation
 │   ├── analysis/           # technical indicators, sentiment, aggregator for LLM
 │   ├── algos/               # option_selling, momentum, value, mean_reversion, breakout
 │   ├── llm/                 # prompt templates, client, response parser (may use agents)
@@ -229,14 +231,15 @@ backend/
 
 ### 2.3 API Specification (Contract)
 
-#### Portfolio Mode
+#### Portfolio / Investment
 
 | Method | Endpoint | Request | Response |
 |--------|----------|---------|----------|
-| POST   | `/portfolio/run` | `{ "amount": number, "algo_ids"?: string[], "allocation"?: Record<string, number> }` | `{ "results": [{ "symbol", "name", "suggestion", "confidence", "suggested_quantity"?, "suggested_amount"?, "last_price" }] }` |
+| POST   | `/portfolio/investment` (or extended upload) | `{ "segments": [{ "asset_class", "value"?, "holdings"?: [] }] }` or multipart multi-asset file | `{ "total_value", "allocation": [{ "asset_class", "value", "pct" }], "feedback"? }` |
+| POST   | `/portfolio/run` | `{ "amount": number, "algo_ids"?: string[], "allocation"?: Record<string, number> }` (amount may be equity slice from investment) | `{ "results": [{ "symbol", "name", "suggestion", "confidence", "suggested_quantity"?, "suggested_amount"?, "last_price" }] }` |
 | GET    | `/portfolio/last-run` | - | Same as run result or 404 |
-| POST   | `/portfolio/upload` | multipart file (CSV/Excel) | `{ "total_value", "holdings": [], "feedback": { "summary", "suggestions" }, "sector_mix"?, "concentration" }` |
-| POST   | `/portfolio/rebalance` | `{ "holdings": [], "target_allocation": {} or "strategy": "bands"|"calendar", "band_pct"?: number }` | `{ "current_weights", "target_weights", "trades": [{ "symbol", "action", "quantity"?, "amount"? }] }` |
+| POST   | `/portfolio/upload` | multipart file: stocks-only (symbol, quantity, …) or multi-asset (asset_class/type + value or holdings) | `{ "total_value", "holdings"?, "segments"?, "allocation"?, "feedback": { "summary", "suggestions", "analysis_html"? }, "sector_mix"?, "concentration" }` — `analysis_html`: LLM-generated dashboard HTML (equity-research style); see [llm-portfolio-dashboard.md](llm-portfolio-dashboard.md). |
+| POST   | `/portfolio/rebalance` | `{ "holdings": [{ "symbol", "quantity", "avg_cost"?, "value"? }], "target_allocation"?: Record<symbol, weight>, "strategy"?: "full"\|"bands", "band_pct"?: number }` — omit target for equal-weight. | `{ "current_weights", "target_weights", "trades": [{ "symbol", "action": "buy"\|"sell", "quantity"?, "amount" }] }` (stock-level; asset-class in Phase 3B) |
 
 #### Explore Algos
 
@@ -255,13 +258,20 @@ backend/
 
 ### 2.4 Key Backend Modules
 
-- **Portfolio run**: Load config (watchlists per algo); for each selected algo, fetch data (Dhan OHLC/options), run technical + optional news/LLM, get confidence + suggestion; apply sizing from amount and allocation; return aggregated results.
-- **Portfolio upload**: Parse CSV/Excel → list of holdings; optionally resolve symbol to name/sector; compute total value, sector mix, concentration; build feedback text (summary + suggestions); return.
-- **Rebalancing**: Input: current holdings (with values), target allocation (e.g. equity 60%, debt 40%, or per-sector). Compute current weights; compare to target; if using bands (e.g. ±5%), trigger rebalance when drift exceeds band; output list of trades (buy/sell, symbol, quantity or amount).
+- **Investment portfolio**: Accept multi-asset input (segments: asset_class + value/holdings) or multi-asset upload; return total value and allocation by asset_class (equity, debt, mutual_fund, gold, cash). Used for high-level view and as context for rebalancing and stocks deep-dive.
+- **Portfolio run**: Load config (watchlists per algo); for each selected algo, fetch data (broker OHLC/options, e.g. Dhan), run technical + optional news/LLM, get confidence + suggestion; apply sizing from amount and allocation; return aggregated results. Amount may be equity slice from investment view.
+- **Portfolio upload**: Parse CSV/Excel → stocks-only (holdings) or multi-asset (rows with asset_class/type and value or holdings); optionally resolve symbol to name/sector; compute total value, sector mix, concentration; build feedback; return. Multi-asset upload returns allocation by asset_class.
+- **Rebalancing**: Input: current holdings and/or segments (asset-class level). Target allocation at **asset-class** level (e.g. equity 60%, debt 40%) and/or per-sector within equity. Compute current weights; compare to target; bands or calendar; output high-level trades (e.g. "add ₹X to equity") and, when equity holdings provided, stock-level trades (symbol, action, quantity or amount).
 - **Algos list/detail**: List: filter by segment from config. Detail: return static overview (from config) + stocks table (from last run or cache; refresh triggers run for that algo only).
 - **Learning**: Serve from config (e.g. `config/learning/cards.json` and markdown or HTML bodies); list and get by id.
 
-### 2.5 Dhan Integration
+### 2.5 Broker / Market Data Integration
+
+The system uses a **broker or market data provider** for authentication, market data (LTP, OHLC, options chain), and optionally order placement. The architecture is provider-agnostic; additional providers can be added alongside or instead of the first implementation.
+
+**Backend structure**: A **factory** (`app/data/factory.get_broker_client`) returns the configured broker client based on settings (e.g. `BROKER_PROVIDER=dhan`). All clients implement a common **protocol** (`app/data/base.BrokerClient`): `get_ltp`, `get_ohlc`, `place_order`. The **Dhan implementation** lives in `app/data/dhan_client.DhanBrokerClient` and uses the `dhanhq` package.
+
+**First implementation: Dhan**
 
 - **Auth**: Access token (header) + client_id; token refresh before expiry (e.g. 24h).
 - **Market data**: `POST /marketfeed/ltp`, `POST /marketfeed/ohlc`; for F&O, options chain endpoint if available. Map symbol → security_id via config or Dhan reference.
@@ -269,11 +279,11 @@ backend/
 
 ### 2.6 Rebalancing Logic (Traditional)
 
-- **Target allocation**: User or config provides target weights (e.g. equity 60%, debt 40%; or sector weights).
-- **Current weights**: From uploaded holdings (value per holding / total value).
-- **Bands**: If |current_weight - target_weight| > band_pct (e.g. 5%), include in rebalance list.
-- **Calendar**: Alternatively, rebalance on a schedule (e.g. quarterly); output is same trade list.
-- **Output**: List of { symbol, action: "buy"|"sell", quantity or amount } to move toward target.
+- **Target allocation**: User or config provides target weights. **Asset-class level**: e.g. equity 60%, debt 40% (for investment-level rebalancing). **Stock/sector level**: per holding or per sector within equity (when holdings are provided).
+- **Current weights**: From uploaded holdings (value per holding / total value) or from segments (value per asset_class / total value).
+- **Full**: Rebalance to exact target weights. **Bands**: If |current_weight - target_weight| > band_pct (e.g. 5%), include in rebalance list only then.
+- **Calendar** (future): Rebalance on a schedule (e.g. quarterly); output is same trade list.
+- **Output**: **Asset-class**: list of { asset_class, action, amount } (e.g. "add ₹X to equity", "reduce debt by ₹Y"). **Stock-level** (when equity holdings provided): list of { symbol, action: "buy"|"sell", quantity or amount }.
 
 ---
 
@@ -325,10 +335,11 @@ frontend/
 
 | Route (example) | Component       | Flow  | Description |
 |----------------|-----------------|------|-------------|
-| `/`            | Home/Layout     | -    | Nav: Portfolio Mode, Explore, Learning |
-| `/portfolio`   | PortfolioMode   | Flow 1 | Tabs/cards: New portfolio \| Existing portfolio |
-| `/portfolio/new` | NewPortfolioForm + RunResultsTable | Flow 1 | Amount, algo selection, run, results |
-| `/portfolio/existing` | ExistingPortfolioUpload → AnalysisFeedback → RebalanceView | Flow 1 | Upload, feedback, rebalance |
+| `/`            | Home/Layout     | -    | Nav: Portfolio / Investment, Explore, Learning |
+| `/portfolio`   | PortfolioMode   | Flow 1 | Entry: Investment (multi-asset) \| Stocks only (New \| Existing) |
+| `/portfolio/investment` | InvestmentInput → AllocationView → RebalanceView (asset-class) → link "Deep-dive: Stocks" | Flow 1 | Multi-asset input/upload, allocation by asset class, rebalance; deep-dive to equity |
+| `/portfolio/new` | NewPortfolioForm + RunResultsTable | Flow 1 | Amount (or equity slice), algo selection, run, results |
+| `/portfolio/existing` | ExistingPortfolioUpload → AnalysisFeedback → RebalanceView | Flow 1 | Upload stocks (or equity slice), feedback, rebalance |
 | `/algos`       | ExploreAlgos    | Flow 2 | Filter Stocks/F&O, AlgoCard grid |
 | `/algos/:id`   | AlgoDetail      | Flow 2 | Overview + StocksTable |
 | `/learning`    | Learning        | Flow 3 | LearningCard grid, optional category filter |
@@ -344,7 +355,7 @@ frontend/
 - **StocksTable**: Table of symbol, name, suggestion, confidence, last_price (and for run results: suggested_quantity/amount).
 - **LearningCard**: Title, category, short description; link to `/learning/:id`.
 - **LearningDetail**: GET /learning/cards/:id; render title, body, optional image/link.
-- **RebalanceView**: Table or list: current weight, target weight, difference; list of suggested trades (symbol, action, quantity/amount).
+- **RebalanceView**: Table or list: current weight, target weight, difference; list of suggested trades. Supports asset-class level (e.g. "add ₹X to equity") and/or stock-level (symbol, action, quantity/amount).
 
 ### 3.5 Environment and API Base URL
 
@@ -361,12 +372,13 @@ frontend/
 
 ### 4.2 Upload/Feedback Response
 
-- total_value, holdings[] (symbol, quantity, value, sector?), feedback { summary, suggestions }, sector_mix (optional), concentration (optional).
+- **Stocks-only**: total_value, holdings[] (symbol, quantity, value, sector?), feedback { summary, suggestions }, sector_mix (optional), concentration (optional).
+- **Investment / multi-asset**: total_value, segments[] { asset_class, value, holdings? }, allocation[] { asset_class, value, pct }, feedback (optional).
 
 ### 4.3 Rebalance Request/Response
 
-- **Request**: holdings[] (symbol, quantity, value), target_allocation { segment_or_symbol: weight } or strategy + band_pct.
-- **Response**: current_weights, target_weights, trades[] { symbol, action, quantity or amount }.
+- **Request**: holdings[] (symbol, quantity, value) and/or segments[] (asset_class, value); target_allocation { asset_class or symbol: weight }; strategy + band_pct (optional).
+- **Response**: current_weights, target_weights, trades[] { symbol?, asset_class?, action, quantity?, amount? } — asset-class-level and/or stock-level trades.
 
 ### 4.4 Algo List and Detail
 
@@ -382,7 +394,7 @@ frontend/
 
 ## 5. Security and Config
 
-- **Secrets**: Dhan access token, client_id, LLM API key, news API key in environment variables only.
+- **Secrets**: Broker access token and client_id (e.g. Dhan), LLM API key, news API key in **environment variables (or .env) only**; never in config.yaml. Non-secret broker/app options live in `backend/config/config.yaml`.
 - **CORS**: Backend allows frontend origin (e.g. localhost:5173 in dev).
 - **Validation**: All request bodies validated with Pydantic; return 422 with details on validation error.
 - **Errors**: Consistent format { errorType, errorCode, errorMessage } and appropriate HTTP status (4xx, 5xx).
@@ -391,6 +403,6 @@ frontend/
 
 ## 6. Optional Execution Path
 
-- **Execution module**: Reads run results (suggestion, confidence); if confidence >= threshold and action in [Buy, Strong Buy] (or Sell for short), compute quantity from sizing; call Dhan place_order.
+- **Execution module**: Reads run results (suggestion, confidence); if confidence >= threshold and action in [Buy, Strong Buy] (or Sell for short), compute quantity from sizing; call broker place_order (e.g. Dhan).
 - **Dry-run**: Log order payload instead of sending; config flag to switch to live.
-- **Rate limits**: Respect Dhan order limits (e.g. 10/sec); queue if needed.
+- **Rate limits**: Respect broker/provider order limits (e.g. Dhan: 10/sec); queue if needed.

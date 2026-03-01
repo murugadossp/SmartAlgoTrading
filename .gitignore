@@ -10,7 +10,7 @@ dist/
 build/
 *.egg
 
-# Virtual env (we use external venv at py_venv/SmartAlgoTrading)
+# Virtual env (backend/.venv or external)
 venv/
 .venv/
 env/

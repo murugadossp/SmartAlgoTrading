@@ -1,83 +1,69 @@
 # Setup and development environment
 
-This document records the project’s Python version, virtual environment location, and use of **uv** for all Python tooling.
+This document records the project’s Python version, virtual environment location, and use of **uv** or standard **venv** for Python tooling.
 
 ---
 
 ## Python version
 
-- **Python 3.14** (e.g. 3.14.0 or 3.14.x). Install and manage via **uv** (see below).
+- **Python 3.12** (stable). Use 3.12.x for the backend. Install via your system package manager, [pyenv](https://github.com/pyenv/pyenv), or **uv** (see below).
 
 ---
 
-## Virtual environment location
+## Virtual environment (single)
 
-The backend virtual environment is **outside** the repo, in a shared directory, **named by project**:
-
-| Item        | Value |
-|------------|--------|
-| **Base path** | `/Users/murugadosssp/py_venv` |
-| **Project venv** | `/Users/murugadosssp/py_venv/SmartAlgoTrading` |
-| **Python** | 3.14 |
-
-So the project’s venv is **`/Users/murugadosssp/py_venv/SmartAlgoTrading`** (one folder per project under `py_venv`).
-
----
-
-## uv for all Python operations
-
-- **uv** is used for:
-  - Installing a specific Python version (e.g. 3.14)
-  - Creating the project virtual environment
-  - Installing, adding, and removing Python packages (no `pip` or `venv` for these)
-- Install uv: [https://docs.astral.sh/uv/](https://docs.astral.sh/uv/) (e.g. `curl -LsSf https://astral.sh/uv/install.sh | sh` or `pip install uv`).
+The project uses **one** virtual environment: `backend/.venv`. Create it from the `backend/` directory. Do not use a second venv elsewhere.
 
 ---
 
 ## Backend: step-by-step setup
 
-**1. Install Python 3.14 (via uv)**
+**1. Ensure Python 3.12 is installed**
 
 ```bash
-uv python install 3.14
+python3.12 --version
 ```
 
-**2. Create the project virtual environment**
+If needed, install via Homebrew (`brew install python@3.12`), pyenv (`pyenv install 3.12`), or uv (`uv python install 3.12`).
+
+**2. Create the project virtual environment (from repo root)**
 
 ```bash
-uv venv /Users/murugadosssp/py_venv/SmartAlgoTrading --python 3.14
+cd backend
+python3.12 -m venv .venv
 ```
 
 **3. Activate the venv**
 
 - **macOS / Linux:**
   ```bash
-  source /Users/murugadosssp/py_venv/SmartAlgoTrading/bin/activate
+  source .venv/bin/activate
   ```
 - **Windows:**  
-  `.\Users\murugadosssp\py_venv\SmartAlgoTrading\Scripts\activate` (adjust drive/path if needed).
+  `.venv\Scripts\activate`
 
-**4. Install backend dependencies (from repo root or `backend/`)**
+**4. Install backend dependencies**
 
 ```bash
-cd backend
-uv pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-**5. Run the backend (after app exists)**
+**5. Run the backend**
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+Or use the root-level script: from repo root, `./start-dev.sh` (starts backend and frontend).
+
 ---
 
-## Adding or changing Python packages
+## Optional: uv for Python operations
 
-- **Always use uv** so the project venv and lock behavior stay consistent:
-  - Install a package: `uv pip install <package>`
-  - Install from requirements: `uv pip install -r requirements.txt`
-  - After adding a dependency, update `backend/requirements.txt` so others can reproduce the env.
+- **uv** can be used instead of pip/venv for faster installs:
+  - Install uv: [https://docs.astral.sh/uv/](https://docs.astral.sh/uv/)
+  - Create venv: `uv venv backend/.venv --python 3.12`
+  - Install deps: `cd backend && uv pip install -r requirements.txt`
 
 ---
 
@@ -85,9 +71,10 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 | Detail | Value |
 |--------|--------|
-| Python | 3.14 |
-| Venv path | `/Users/murugadosssp/py_venv/SmartAlgoTrading` |
-| Package / env tool | **uv** (venv creation, `uv pip install`, etc.) |
-| Backend deps | `backend/requirements.txt`; install with `uv pip install -r requirements.txt` |
+| Python | 3.12 |
+| Venv path | `backend/.venv` |
+| Backend deps | `backend/requirements.txt`; install with `pip install -r requirements.txt` |
 
-See also [backend/README.md](../backend/README.md) for env vars (Dhan, LLM, news API keys) and run instructions.
+**Configuration split:** Non-secret options (e.g. broker provider) in `backend/config/config.yaml`; secrets (broker tokens, LLM/news API keys) in `.env` only. See [backend/README.md](../backend/README.md#configuration) and root [README.md](../README.md#configuration-backend).
+
+**Testing:** See [testprocess.md](testprocess.md) for manual and automated test procedures.

@@ -1,6 +1,6 @@
 # Smart Algo Trading — Frontend
 
-React application for the Smart Algo Trading system (Indian market, Dhan API, AI/LLM).
+React application for the Smart Algo Trading system (Indian market, broker API and LLM).
 
 ## Flows
 
