@@ -1,0 +1,66 @@
+# Algo metadata and watchlists (Phase 1)
+# id, name, segment (stocks | fno), short_description, overview text, symbol watchlist
+algos:
+  - id: momentum
+    name: Momentum
+    segment: stocks
+    short_description: Trend-following on price and volume.
+    overview: |
+      Identifies stocks with strong short-term momentum (e.g. SMA crossovers, breakout).
+      Uses SMA(20, 50), volume confirmation; suggests Buy on strength, Sell on weakness.
+    watchlist:
+      - RELIANCE
+      - TCS
+      - INFY
+      - HDFCBANK
+      - ICICIBANK
+  - id: value
+    name: Value
+    segment: stocks
+    short_description: Undervaluation vs fundamentals.
+    overview: |
+      Screens for stocks trading below estimated fair value (P/E, P/B, earnings yield).
+      Suggests Buy when undervalued, Hold/Sell when overvalued.
+    watchlist:
+      - RELIANCE
+      - TATASTEEL
+      - HINDALCO
+      - SBIN
+      - ONGC
+  - id: mean_reversion
+    name: Mean Reversion
+    segment: stocks
+    short_description: Oversold/overbought bounce (RSI, Bollinger).
+    overview: |
+      Uses RSI and Bollinger Bands to spot oversold (Buy) and overbought (Sell) conditions.
+      Suited for range-bound names.
+    watchlist:
+      - NIFTY 50
+      - BANKNIFTY
+      - RELIANCE
+      - INFY
+      - TCS
+  - id: breakout
+    name: Breakout
+    segment: stocks
+    short_description: Range breakout with volume.
+    overview: |
+      Detects breakouts above resistance or below support with volume confirmation.
+      Suggests Buy on upside breakout, Sell on downside.
+    watchlist:
+      - RELIANCE
+      - TCS
+      - HDFCBANK
+      - KOTAKBANK
+      - BAJFINANCE
+  - id: option_selling
+    name: Option Selling
+    segment: fno
+    short_description: Premium decay, volatility-based (F&O).
+    overview: |
+      Targets premium decay via short options (e.g. NIFTY/BANKNIFTY weekly).
+      Uses implied volatility and delta for strike selection; F&O segment only.
+    watchlist:
+      - NIFTY
+      - BANKNIFTY
+      - FINNIFTY

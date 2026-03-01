@@ -1,0 +1,8 @@
+# Agent-specific config (no prompt text; prompts in system_instructions.md)
+model: "gpt-4o-mini"
+temperature: 0.2
+max_tokens: 1024
+
+# Params injected into .md template when constructing prompt
+suggestion_enum: ["Strong Buy", "Buy", "Hold", "Sell", "Strong Sell"]
+confidence_range: [0, 100]

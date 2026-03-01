@@ -1,0 +1,6 @@
+# Global agent defaults for BaseAgent (model, temperature, etc.)
+# Per-agent config.yaml can override these.
+default:
+  model: "gpt-4o-mini"
+  temperature: 0.2
+  max_tokens: 1024

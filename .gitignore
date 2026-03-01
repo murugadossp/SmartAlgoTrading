@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual env (we use external venv at py_venv/SmartAlgoTrading)
+venv/
+.venv/
+env/
+
+# Env and secrets
+.env
+.env.local
+*.pem
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node / frontend
+node_modules/
+frontend/dist/
+*.log
+npm-debug.log*
+.npm
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project
+backend/.cache/
+*.db
+*.sqlite
