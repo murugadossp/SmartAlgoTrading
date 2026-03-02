@@ -11,9 +11,9 @@ Phased implementation tasks derived from the plan, requirements, and design. Use
 | Phase 0 | Done | Repo structure, FastAPI/React, CORS, config module, BaseAgent pattern, per-agent .md + config.yaml, Pydantic models. |
 | Phase 1 | Done | Algo config (algos.yaml), broker factory + Dhan client, market data service; options chain/news optional. |
 | Phase 2 | Done | Technical analysis (SMA, RSI), scoring agent, Momentum algo, sizing, POST /portfolio/run, GET /portfolio/last-run, New Portfolio UI. |
-| Phase 3 | Done (except T3.3b) | Parser (CSV/Excel), analyzer, feedback builder, **rebalancing logic** (T3.4), POST /portfolio/upload (T3.5), **POST /portfolio/rebalance** (T3.6), Existing Portfolio upload + **Rebalance form + RebalanceView** (T3.7, T3.8), Portfolio landing Investment \| Stocks only (T3.9). **T3.3b** (LLM portfolio dashboard HTML) pending. |
+| Phase 3 | Done | Parser (CSV/Excel), analyzer, feedback builder, **T3.3b** (LLM portfolio dashboard HTML: portfolio_research_agent, analysis_html in feedback, DOMPurify on frontend), rebalancing (T3.4–T3.8), Portfolio landing (T3.9). |
 | Phase 3B | Pending | Multi-asset segments, POST /portfolio/investment, asset-class rebalance, AllocationView, Deep-dive: Stocks. |
-| Phase 4 | Partial | GET /algos, GET/POST algo detail/refresh implemented; Explore Algos page and filter done; algo detail page with StocksTable/Refresh pending (T4.5); remaining algos (Value, Mean reversion, Breakout, Option selling) pending (T4.6). |
+| Phase 4 | Partial | GET /algos, GET/POST algo detail/refresh; Explore Algos page and filter; **algo detail page** (T4.5: route /algos/:id, overview, StocksTable, Refresh button) done. Remaining algos (T4.6: Value, Mean reversion, Breakout, Option selling) pending. |
 | Phase 5–8 | Pending | Learning cards, news in pipeline, execution, polish, tests. |
 
 See [testprocess.md](testprocess.md) for manual and automated test procedures.

@@ -31,18 +31,27 @@ def list_algos(segment: str | None = Query(default=None, description="Filter by 
 
 @router.get("/{algo_id}")
 def get_algo_detail(algo_id: str) -> dict[str, Any]:
-    """Return overview from config and stocks table from last run or cache."""
+    """Return overview from config (goal, inputs, signals, risk), chart_type, and stocks table."""
     algo = get_algo_by_id(algo_id)
     if not algo:
         raise HTTPException(status_code=404, detail=f"Algo not found: {algo_id}")
+    _overview = algo.get("overview") or algo.get("short_description") or ""
     overview = {
-        "goal": algo.get("overview", algo.get("short_description", "")),
-        "inputs": "OHLC, volume (from broker/market data)",
-        "signals": "SMA, RSI, trend (momentum); configurable per algo",
-        "risk": "Position sizing and confidence threshold",
+        "summary": (_overview if isinstance(_overview, str) else "").strip(),
+        "goal": (algo.get("goal") or "").strip() or _overview,
+        "inputs": (algo.get("inputs") or "").strip(),
+        "signals": (algo.get("signals") or "").strip(),
+        "risk": (algo.get("risk") or "").strip(),
     }
     stocks = _algo_stocks_cache.get(algo_id, [])
-    return {"overview": overview, "stocks": stocks}
+    return {
+        "id": algo.get("id"),
+        "name": algo.get("name"),
+        "segment": algo.get("segment"),
+        "overview": overview,
+        "chart_type": algo.get("chart_type"),
+        "stocks": stocks,
+    }
 
 
 @router.post("/{algo_id}/refresh")

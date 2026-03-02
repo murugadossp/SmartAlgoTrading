@@ -13,7 +13,7 @@ FastAPI backend for the Smart Algo Trading system (Indian market, broker/market 
 - **Python 3.12**
 - FastAPI
 - Broker/market data: first implementation Dhan (`dhanhq` client) for market data and optional orders
-- LLM: OpenAI / Anthropic / local (structured JSON output)
+- LLM: **AGNO** (Agno) framework, vendor-agnostic (OpenAI, Anthropic); config via `config/config.yaml` (llm.provider, llm.default_model) and env (OPENAI_API_KEY, ANTHROPIC_API_KEY); structured output via Pydantic
 - News: Web search API (e.g. Serper, Google, Bing)
 
 ## Setup

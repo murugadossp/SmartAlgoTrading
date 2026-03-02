@@ -1,11 +1,11 @@
-"""Build text summary and suggestions from analyzer output (rule-based). Optional: LLM later."""
+"""Build text summary and suggestions from analyzer output (rule-based). LLM dashboard HTML via portfolio_research_agent."""
 from typing import Any
 
 
 def build_feedback(analysis: dict[str, Any]) -> dict[str, Any]:
     """
-    From analyzer output, build feedback: summary (str), suggestions (list[str]).
-    Optionally include analysis_html when LLM portfolio research agent is wired (T3.3b).
+    From analyzer output, build feedback: summary (str), suggestions (list[str]), analysis_html (str | None).
+    analysis_html is LLM-generated dashboard HTML when portfolio_research_agent is available and the configured LLM provider API key is set (AGNO, vendor-agnostic).
     """
     total = analysis.get("total_value") or 0
     count = analysis.get("holding_count") or 0
@@ -36,8 +36,15 @@ def build_feedback(analysis: dict[str, Any]) -> dict[str, Any]:
     if not suggestions:
         suggestions.append("Review target allocation and rebalancing bands when you are ready.")
 
+    analysis_html = None
+    try:
+        from app.agents.run_portfolio_research import run_portfolio_research
+        analysis_html = run_portfolio_research(analysis)
+    except Exception:
+        pass
+
     return {
         "summary": " ".join(summary_parts),
         "suggestions": suggestions,
-        "analysis_html": None,  # T3.3b: LLM-generated dashboard HTML when agent is implemented
+        "analysis_html": analysis_html,
     }

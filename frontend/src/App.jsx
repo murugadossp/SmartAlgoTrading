@@ -4,6 +4,7 @@ import Card from './components/Card'
 import NewPortfolioForm from './components/portfolio/NewPortfolioForm'
 import ExistingPortfolioUpload from './components/portfolio/ExistingPortfolioUpload'
 import ExploreAlgos from './components/algos/ExploreAlgos'
+import AlgoDetail from './components/algos/AlgoDetail'
 
 function App() {
   return (
@@ -16,7 +17,7 @@ function App() {
         <Route path="/portfolio/new" element={<NewPortfolioPage />} />
         <Route path="/portfolio/existing" element={<ExistingPortfolioPage />} />
         <Route path="/algos" element={<ExploreAlgosPage />} />
-        <Route path="/algos/:algoId" element={<AlgoDetailPlaceholder />} />
+        <Route path="/algos/:algoId" element={<AlgoDetailPage />} />
         <Route path="/learning" element={<LearningPlaceholder />} />
         <Route path="/profile" element={<ProfilePlaceholder />} />
         <Route path="/settings" element={<SettingsPlaceholder />} />
@@ -170,11 +171,11 @@ function ExistingPortfolioPage() {
   )
 }
 
-function AlgoDetailPlaceholder() {
+function AlgoDetailPage() {
   return (
-    <Card title="Algo detail">
-      <p>Algo overview and stocks table will be wired here.</p>
-    </Card>
+    <div className="explore-algos">
+      <AlgoDetail />
+    </div>
   )
 }
 

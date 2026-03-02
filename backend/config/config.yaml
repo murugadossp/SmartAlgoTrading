@@ -6,3 +6,8 @@ broker:
   # dhan:
   #   request_timeout: 30
   #   rate_limit_per_sec: 5
+
+# LLM: vendor-agnostic (AGNO). Provider and default model; API keys in .env (OPENAI_API_KEY, ANTHROPIC_API_KEY).
+llm:
+  provider: openai   # openai | anthropic
+  default_model: "gpt-4o-mini"

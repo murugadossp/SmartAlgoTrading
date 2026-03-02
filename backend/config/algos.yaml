@@ -1,66 +1,114 @@
-# Algo metadata and watchlists (Phase 1)
-# id, name, segment (stocks | fno), short_description, overview text, symbol watchlist
+# Algo metadata — keep goal/inputs/signals/risk SHORT for readable cards (1 line + 3–4 bullets)
 algos:
   - id: momentum
     name: Momentum
     segment: stocks
     short_description: Trend-following on price and volume.
-    overview: |
-      Identifies stocks with strong short-term momentum (e.g. SMA crossovers, breakout).
-      Uses SMA(20, 50), volume confirmation; suggests Buy on strength, Sell on weakness.
-    watchlist:
-      - RELIANCE
-      - TCS
-      - INFY
-      - HDFCBANK
-      - ICICIBANK
+    overview: Identifies strong short-term momentum using SMA crossovers and volume.
+    goal: |
+      Capture upside when price trends with strength.
+      • Buy when price > SMA20 > SMA50 (stacked trend)
+      • Sell or reduce when momentum fades
+      • Suited for swing to medium-term
+    inputs: |
+      • OHLC and volume (daily)
+      • SMA(20), SMA(50), RSI(14)
+      • Lookback ~50–60 days
+    signals: |
+      • Price above both SMAs = bullish
+      • SMA crossover = momentum shift
+      • RSI 40–70 confirms strength; >70 overbought
+      • Above-average volume on up moves
+    risk: |
+      • Late entries in choppy markets
+      • Use 5% position size, confidence >65
+      • Stop-loss or trailing stop
+    chart_type: momentum
+    watchlist: [RELIANCE, TCS, INFY, HDFCBANK, ICICIBANK]
+
   - id: value
     name: Value
     segment: stocks
     short_description: Undervaluation vs fundamentals.
-    overview: |
-      Screens for stocks trading below estimated fair value (P/E, P/B, earnings yield).
-      Suggests Buy when undervalued, Hold/Sell when overvalued.
-    watchlist:
-      - RELIANCE
-      - TATASTEEL
-      - HINDALCO
-      - SBIN
-      - ONGC
+    overview: Screens for stocks below fair value (P/E, P/B, earnings yield).
+    goal: |
+      Buy quality when cheap; hold as value normalizes.
+      • Low P/E, P/B vs sector or history
+      • High earnings yield vs risk-free rate
+      • Long-term holding
+    inputs: |
+      • Price and fundamentals (P/E, P/B, ROE)
+      • Sector or peer benchmarks
+    signals: |
+      • P/E below average; P/B < 1 or below peers
+      • Quality: stable ROE, manageable debt
+    risk: |
+      • Value traps — use quality filters
+      • Diversify; rebalance when valuation reverts
+    chart_type: value
+    watchlist: [RELIANCE, TATASTEEL, HINDALCO, SBIN, ONGC]
+
   - id: mean_reversion
     name: Mean Reversion
     segment: stocks
     short_description: Oversold/overbought bounce (RSI, Bollinger).
-    overview: |
-      Uses RSI and Bollinger Bands to spot oversold (Buy) and overbought (Sell) conditions.
-      Suited for range-bound names.
-    watchlist:
-      - NIFTY 50
-      - BANKNIFTY
-      - RELIANCE
-      - INFY
-      - TCS
+    overview: "Fade extremes: buy oversold (RSI <30), sell overbought (RSI >70)."
+    goal: |
+      Profit from short-term mean reversion.
+      • Buy when RSI < 30 (oversold)
+      • Sell when RSI > 70 (overbought)
+      • Best in range-bound markets
+    inputs: |
+      • OHLC for RSI and Bollinger
+      • RSI(14), Bollinger 20d, 2σ
+    signals: |
+      • RSI < 30 = oversold (buy)
+      • RSI > 70 = overbought (exit)
+      • Price at lower band = oversold
+    risk: |
+      • Trends can stay overbought/oversold
+      • Smaller size; use trend filter
+    chart_type: rsi
+    watchlist: [NIFTY 50, BANKNIFTY, RELIANCE, INFY, TCS]
+
   - id: breakout
     name: Breakout
     segment: stocks
     short_description: Range breakout with volume.
-    overview: |
-      Detects breakouts above resistance or below support with volume confirmation.
-      Suggests Buy on upside breakout, Sell on downside.
-    watchlist:
-      - RELIANCE
-      - TCS
-      - HDFCBANK
-      - KOTAKBANK
-      - BAJFINANCE
+    overview: Enter when price breaks range (e.g. 20d high/low) with volume.
+    goal: |
+      Catch the start of new trends.
+      • Buy breakout above resistance + volume
+      • Stop at breakout level
+    inputs: |
+      • OHLC and volume
+      • N-day high/low or ATR channels
+    signals: |
+      • Price > 20d high + volume = buy
+      • Price < 20d low + volume = sell
+    risk: |
+      • False breakouts — use volume
+      • Stop at breakout; don’t chase
+    chart_type: breakout
+    watchlist: [RELIANCE, TCS, HDFCBANK, KOTAKBANK, BAJFINANCE]
+
   - id: option_selling
     name: Option Selling
     segment: fno
     short_description: Premium decay, volatility-based (F&O).
-    overview: |
-      Targets premium decay via short options (e.g. NIFTY/BANKNIFTY weekly).
-      Uses implied volatility and delta for strike selection; F&O segment only.
-    watchlist:
-      - NIFTY
-      - BANKNIFTY
-      - FINNIFTY
+    overview: Earn theta by selling options when IV is high; defined-risk preferred.
+    goal: |
+      Earn time decay; sell OTM when IV elevated.
+      • Delta-based strike (e.g. 0.16)
+      • Spreads to limit margin and tail risk
+    inputs: |
+      • Options chain: IV, OI, Greeks
+      • Underlying LTP and volatility
+    signals: |
+      • Sell OTM puts/calls when IV high
+      • Use calendar or vertical spreads
+    risk: |
+      • Unlimited downside on naked shorts
+      • Margin and assignment risk; F&O only
+    chart_type: null
+    watchlist: [NIFTY, BANKNIFTY, FINNIFTY]

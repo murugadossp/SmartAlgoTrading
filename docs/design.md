@@ -77,7 +77,7 @@ flowchart TB
 - **HTTP**: REST; JSON request/response
 - **Broker / market data**: Provider-agnostic interface; first implementation: Dhan (official `dhanhq` client).
 - **News**: HTTP client + Serper/Google/Bing API (or similar)
-- **LLM**: OpenAI SDK or Anthropic/local HTTP client; structured output (JSON)
+- **LLM**: **Vendor-agnostic** via **AGNO** (Agno) framework; supported providers: OpenAI, Anthropic. Config: `config/config.yaml` → `llm.provider` (openai | anthropic), `llm.default_model`; secrets in env: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`. Structured output (JSON) via Pydantic.
 - **Config**: **Secrets** (broker tokens, API keys) in **env only**. **Non-secret options** (e.g. `broker.provider`) in global `backend/config/config.yaml`; optional YAML for watchlists, algo metadata (`config/algos.yaml`).
 - **Agents**: AGNO framework (Agno) for LLM agents; Pydantic for structured JSON response design; BaseAgent pattern with global config and per-agent override (see §2.2.1).
 

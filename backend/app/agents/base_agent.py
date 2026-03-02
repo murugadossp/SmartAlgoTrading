@@ -1,5 +1,5 @@
 """BaseAgent: loads global config and per-agent .md + config.yaml; applies overrides.
-AGNO can be integrated here for actual model calls; this module handles config loading and prompt construction.
+Model calls use app.agents.llm_factory (AGNO, vendor-agnostic). This module handles config loading and prompt construction.
 """
 from pathlib import Path
 from typing import Any

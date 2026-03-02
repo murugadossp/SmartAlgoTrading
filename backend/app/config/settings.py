@@ -15,8 +15,11 @@ class Settings(BaseSettings):
     broker_provider: str = "dhan"
     dhan_access_token: str = ""
     dhan_client_id: str = ""
-    openai_api_key: str = ""
+    # LLM: vendor-agnostic (AGNO); provider + model + keys
+    llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
     serper_api_key: str = ""
     config_path: str = ""
 
@@ -42,4 +45,9 @@ def get_settings() -> Settings:
     cfg = _load_global_config()
     if cfg.get("broker", {}).get("provider"):
         s.broker_provider = (cfg["broker"].get("provider") or s.broker_provider).strip().lower()
+    llm = cfg.get("llm") or {}
+    if llm.get("provider"):
+        s.llm_provider = (llm.get("provider") or s.llm_provider).strip().lower()
+    if llm.get("default_model"):
+        s.llm_model = (llm.get("default_model") or s.llm_model).strip()
     return s

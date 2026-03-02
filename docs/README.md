@@ -9,6 +9,7 @@ This folder contains the project documentation derived from the product plan.
 | [design.md](design.md) | Technical design: architecture, backend (FastAPI) and frontend (React) structure, API contract, data models, rebalancing (asset-class and stock-level). |
 | [tasks.md](tasks.md) | Phased implementation tasks (Phase 0–8, Phase 3B investment-level) with task IDs, dependencies, and notes. |
 | [investment-level-plan.md](investment-level-plan.md) | Investment-level portfolio and stocks deep-dive: data model, flows, APIs, open choices. |
+| [investment-level_and_stocks_deep-dive_plan.md](investment-level_and_stocks_deep-dive_plan.md) | Cursor plan snapshot: investment-level layer, allocation view, rebalance by asset class, deep-dive into stocks. |
 | [llm-portfolio-dashboard.md](llm-portfolio-dashboard.md) | LLM portfolio analysis: equity-research-style HTML dashboard, API shape, frontend rendering. |
 | [setup.md](setup.md) | **Setup and dev environment**: Python 3.12, virtual env at `backend/.venv`. |
 | [testprocess.md](testprocess.md) | **Test process**: manual and automated testing (backend, frontend, APIs, E2E). |

@@ -1,10 +1,10 @@
-"""Run scoring agent: load prompt from scoring_agent, substitute placeholders, call LLM, return AlgoScoringResponse."""
+"""Run scoring agent: load prompt from scoring_agent, substitute placeholders, call LLM via AGNO, return AlgoScoringResponse."""
 import json
 import re
 from typing import Any
 
-from app.agents.base_agent import load_agent_config
-from app.config.settings import get_settings
+from app.agents.base_agent import get_effective_agent_config, load_agent_config
+from app.agents.llm_factory import run_agent_chat
 from app.models.responses import AlgoScoringResponse
 
 
@@ -46,8 +46,8 @@ def run_scoring_agent(
     news_summary: str = "",
 ) -> AlgoScoringResponse:
     """
-    Load scoring_agent prompt and config, substitute placeholders, call LLM, return structured response.
-    If no OpenAI API key or LLM fails, returns a stub response (Hold, 50, "No LLM available").
+    Load scoring_agent prompt and config, substitute placeholders, call LLM via AGNO (vendor-agnostic), return structured response.
+    If no API key for configured provider or LLM fails, returns a stub response (Hold, 50, "No LLM available").
     """
     try:
         system_instructions, config = load_agent_config("scoring_agent")
@@ -55,26 +55,22 @@ def run_scoring_agent(
         return AlgoScoringResponse(confidence=50, suggestion="Hold", reasoning="Scoring agent config not found.")
 
     prompt = _substitute_prompt(system_instructions, symbol, technical_summary, news_summary, config)
-    settings = get_settings()
-    if not settings.openai_api_key:
-        return AlgoScoringResponse(confidence=50, suggestion="Hold", reasoning="No LLM API key configured.")
+    effective = get_effective_agent_config("scoring_agent")
+    provider = effective.get("provider")
+    model = effective.get("model")
+    temperature = effective.get("temperature", 0.2)
+    max_tokens = effective.get("max_tokens", 256)
 
-    model = config.get("model") or settings.llm_model or "gpt-4o-mini"
-    temperature = config.get("temperature", 0.2)
-    max_tokens = config.get("max_tokens", 256)
-
-    try:
-        from openai import OpenAI
-        client = OpenAI(api_key=settings.openai_api_key)
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": f"Score symbol: {symbol}. Return JSON only."}],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        content = (resp.choices[0].message.content or "").strip()
-    except Exception:
-        return AlgoScoringResponse(confidence=50, suggestion="Hold", reasoning="LLM call failed.")
+    content = run_agent_chat(
+        system_instructions=prompt,
+        user_message=f"Score symbol: {symbol}. Return JSON only.",
+        provider=provider,
+        model_id=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    if not content:
+        return AlgoScoringResponse(confidence=50, suggestion="Hold", reasoning="No LLM available or LLM call failed.")
 
     parsed = _parse_json_from_response(content)
     if not parsed:

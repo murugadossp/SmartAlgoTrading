@@ -1,7 +1,10 @@
+import DOMPurify from 'dompurify'
+
 export default function AnalysisFeedback({ data }) {
   if (!data) return null
   const { total_value, holding_count, feedback, sector_mix, concentration, holdings } = data
-  const { summary, suggestions, analysis_html } = feedback || {}
+  const { summary, suggestions, analysis_html: rawHtml } = feedback || {}
+  const analysis_html = rawHtml ? DOMPurify.sanitize(rawHtml, { ALLOWED_TAGS: ['section', 'div', 'h2', 'h3', 'h4', 'p', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'ul', 'ol', 'li', 'span', 'strong', 'em', 'br'], ALLOWED_ATTR: ['class', 'style'] }) : null
 
   return (
     <div className="analysis-feedback">

@@ -1,0 +1,4 @@
+# Portfolio research agent: produces dashboard HTML from analyzer output
+model: "gpt-4o-mini"
+temperature: 0.3
+max_tokens: 4096
