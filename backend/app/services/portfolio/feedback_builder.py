@@ -38,7 +38,7 @@ def build_feedback(analysis: dict[str, Any]) -> dict[str, Any]:
 
     analysis_html = None
     try:
-        from app.agents.run_portfolio_research import run_portfolio_research
+        from app.agents.portfolio_research_agent.agent import run_portfolio_research
         analysis_html = run_portfolio_research(analysis)
     except Exception:
         pass

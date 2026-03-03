@@ -13,7 +13,7 @@ FastAPI backend for the Smart Algo Trading system (Indian market, broker/market 
 - **Python 3.12**
 - FastAPI
 - Broker/market data: first implementation Dhan (`dhanhq` client) for market data and optional orders
-- LLM: **AGNO** (Agno) framework, vendor-agnostic (OpenAI, Anthropic); config via `config/config.yaml` (llm.provider, llm.default_model) and env (OPENAI_API_KEY, ANTHROPIC_API_KEY); structured output via Pydantic
+- LLM: **AGNO** (Agno) framework, vendor-agnostic (OpenAI, Anthropic); config via `config/config.yaml` (agents.default: provider, model) and env (OPENAI_API_KEY, ANTHROPIC_API_KEY); structured output via Pydantic
 - News: Web search API (e.g. Serper, Google, Bing)
 
 ## Setup
@@ -31,10 +31,10 @@ Optional: use **uv** to create the venv and install deps: `uv venv .venv --pytho
 
 ## Configuration
 
-**Split:** Non-secret options (e.g. broker provider, timeouts) live in **`backend/config/config.yaml`**. Secrets (API keys, broker tokens) live in **`.env`** only and must not be committed.
+**Split:** Non-secret options live in **`backend/config/config.yaml`** (broker, llm, and **agent defaults** under `agents.default`). Secrets live in **`.env`** only.
 
-- **config.yaml**: `broker.provider` (e.g. `dhan`), optional per-provider options. See `backend/config/config.yaml`.
-- **.env**: `DHAN_ACCESS_TOKEN`, `DHAN_CLIENT_ID`, `OPENAI_API_KEY`, `SERPER_API_KEY`, etc. See `.env.example`.
+- **config.yaml**: `broker` and `agents.default` (provider, model, temperature, max_tokens). Per-agent overrides in `app/agents/<name>/config.yaml`. See `backend/config/config.yaml` and `docs/config_agents.md`.
+- **.env**: `DHAN_ACCESS_TOKEN`, `DHAN_CLIENT_ID`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. See `.env.example`.
 - **CONFIG_PATH** (optional): Override path to config directory or file; default is `backend/config/config.yaml`.
 
 ## Run
@@ -46,6 +46,15 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 Or from repo root: `./start-dev.sh` to start both backend and frontend.
 
 API docs: `http://localhost:8000/docs`
+
+## Tests
+
+From `backend/` with the venv activated:
+
+- **Run all tests**: `pytest -v` or `pytest tests/ -v` (if any tests exist under `tests/`).
+- **Parser agent (direct)**: From `backend/` run `./tests/test_run.sh parser_agent` (activates venv and runs the test), or run `python tests/test_parser_agent.py`. From repo root: `./backend/tests/test_run.sh parser_agent`. The script logs to `tests/output/parser_agent_io_<timestamp>.txt`. Run `./tests/test_run.sh` with no args to see options.
+
+See `docs/testprocess.md` for details.
 
 ## Docs
 

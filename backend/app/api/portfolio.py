@@ -8,7 +8,7 @@ from app.algos.momentum import run_momentum
 from app.models.requests import PortfolioRunRequest, RebalanceRequest
 from app.services.portfolio.analyzer import analyze
 from app.services.portfolio.feedback_builder import build_feedback
-from app.services.portfolio.parser import parse_portfolio_file
+from app.services.portfolio.parser import file_content_to_text, parse_portfolio_file
 from app.services.portfolio.rebalance import rebalance
 from app.sizing.position_sizing import apply_sizing_to_results
 
@@ -70,17 +70,63 @@ def portfolio_last_run() -> dict[str, Any]:
     return _last_run
 
 
+@router.post("/parse")
+async def portfolio_parse(file: UploadFile = File(...)) -> dict[str, Any]:
+    """
+    Parse-only endpoint for testing: upload a file and get holdings + errors without running analyze/feedback.
+    Uses same logic as upload (LLM parse if available, else rule-based). Returns source so you can verify which parser ran.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided.")
+    content = await file.read()
+    content_text = file_content_to_text(content, file.filename)
+    holdings: list[dict[str, Any]] = []
+    errors: list[str] = []
+    source = "rule_based"
+    if content_text:
+        try:
+            from app.agents.portfolio_parse_agent.agent import run_portfolio_parse
+            result = run_portfolio_parse(content_text, file.filename)
+            if result and result.holdings:
+                holdings = [h.model_dump() for h in result.holdings]
+                errors = list(result.errors or [])
+                source = "llm"
+        except Exception:
+            pass
+    if not holdings:
+        holdings, errors = parse_portfolio_file(content, file.filename)
+    return {
+        "holdings": holdings,
+        "errors": errors,
+        "source": source,
+        "holding_count": len(holdings),
+    }
+
+
 @router.post("/upload")
 async def portfolio_upload(file: UploadFile = File(...)) -> dict[str, Any]:
     """
-    Upload portfolio file (CSV or Excel). Parse -> analyze -> feedback.
+    Upload portfolio file (CSV or Excel). Parse (LLM if available, else rule-based) -> analyze -> feedback.
     Returns total_value, holdings (with value/weight), feedback (summary, suggestions, analysis_html?), sector_mix, concentration.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided.")
     content = await file.read()
-    holdings, errors = parse_portfolio_file(content, file.filename)
-    if errors:
+    content_text = file_content_to_text(content, file.filename)
+    holdings: list[dict[str, Any]] = []
+    errors: list[str] = []
+    if content_text:
+        try:
+            from app.agents.portfolio_parse_agent.agent import run_portfolio_parse
+            result = run_portfolio_parse(content_text, file.filename)
+            if result and result.holdings:
+                holdings = [h.model_dump() for h in result.holdings]
+                errors = list(result.errors or [])
+        except Exception:
+            pass
+    if not holdings:
+        holdings, errors = parse_portfolio_file(content, file.filename)
+    if errors and not holdings:
         raise HTTPException(status_code=422, detail={"message": "Parse errors", "errors": errors})
     if not holdings:
         raise HTTPException(status_code=422, detail="No valid holdings found in file. Use columns: symbol, quantity, optionally avg_cost or value.")

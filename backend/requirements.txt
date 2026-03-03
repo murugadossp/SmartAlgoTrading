@@ -9,4 +9,6 @@ python-multipart>=0.0.9
 pyyaml>=6.0
 dhanhq>=0.1.0
 agno>=2.0.0
+openai>=1.0.0
 openpyxl>=3.1.0
+pytest>=8.0.0

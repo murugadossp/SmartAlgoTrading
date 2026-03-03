@@ -28,26 +28,27 @@ Manual and automated testing procedures for the Smart Algo Trading project. Use 
 |------|--------|----------|
 | 1 | Ensure `backend/config/config.yaml` exists with `broker.provider` (e.g. `dhan`). | File present; no crash on app load. |
 | 2 | Run backend without `.env` (or with minimal .env). | App starts; broker/LLM calls may fail at use-time but health and config load. |
-| 3 | If using Dhan/LLM: set `DHAN_ACCESS_TOKEN`, `DHAN_CLIENT_ID`; for LLM set `OPENAI_API_KEY` (when `llm.provider: openai`) or `ANTHROPIC_API_KEY` (when `llm.provider: anthropic`) in `backend/.env`. | Portfolio run and market data (if used) succeed when endpoints are called. |
+| 3 | If using Dhan/LLM: set `DHAN_ACCESS_TOKEN`, `DHAN_CLIENT_ID`; for LLM set `OPENAI_API_KEY` (when agents.default provider is openai) or `ANTHROPIC_API_KEY` (when anthropic) in `backend/.env`. | Portfolio run and market data (if used) succeed when endpoints are called. |
 | 4 | **LLM portfolio report**: Set the API key for the configured provider (`OPENAI_API_KEY` for OpenAI, `ANTHROPIC_API_KEY` for Anthropic) in `backend/.env` to enable the portfolio research agent. | After upload, `feedback.analysis_html` is populated with LLM-generated dashboard HTML. If key is missing, upload still returns 200 with `feedback.analysis_html` null. |
 
 ### 2.3 Portfolio APIs (no broker/LLM required for upload/rebalance)
 
 | Step | Action | Expected |
 |------|--------|----------|
-| 1 | **POST /portfolio/upload** — Send multipart file with CSV: `symbol,quantity,value` (e.g. RELIANCE,10,25000 and TCS,5,17500). | 200; response has `total_value`, `holdings`, `feedback` (summary, suggestions, optional `analysis_html`), `sector_mix`, `concentration`. When the configured LLM provider API key is set (OpenAI or Anthropic), `feedback.analysis_html` contains dashboard HTML; otherwise it is null. |
-| 2 | **POST /portfolio/upload** — Send Excel (`.xlsx`) with same columns. | Same as above. |
-| 3 | **POST /portfolio/rebalance** — Body: `{ "holdings": [ {"symbol":"RELIANCE","quantity":10,"value":25000}, {"symbol":"TCS","quantity":5,"value":17500} ], "strategy": "full" }`. | 200; `current_weights`, `target_weights` (equal weight if no target_allocation), `trades` array with symbol, action (buy/sell), amount, quantity. |
-| 4 | **POST /portfolio/rebalance** — Same holdings, `"strategy": "bands", "band_pct": 0.05`. | 200; trades only where drift > 5% (or empty if within bands). |
-| 5 | **POST /portfolio/run** — Body: `{ "amount": 100000, "algo_ids": ["momentum"] }`. | 200 if broker/LLM configured; otherwise may fail with missing credentials. Response: `results` array with symbol, suggestion, confidence, suggested_quantity/amount. |
-| 6 | **GET /portfolio/last-run** — After a successful run. | 200; same shape as last POST /portfolio/run response. |
+| 1 | **POST /portfolio/parse** — Send multipart file (CSV or Excel). | 200; `holdings`, `errors`, `source` ("llm" or "rule_based"), `holding_count`. Use this to test parse logic without running analyze/feedback; check `source` to confirm which parser ran. |
+| 2 | **POST /portfolio/upload** — Send multipart file with CSV: `symbol,quantity,value` (e.g. RELIANCE,10,25000 and TCS,5,17500). | 200; response has `total_value`, `holdings`, `feedback` (summary, suggestions, optional `analysis_html`), `sector_mix`, `concentration`. When the configured LLM provider API key is set (OpenAI or Anthropic), **upload parse** may use the LLM (broker-agnostic; supports Groww, Zerodha, Dhan, etc.); otherwise rule-based parser is used (expects symbol, quantity columns). `feedback.analysis_html` is populated when LLM key is set; otherwise null. |
+| 3 | **POST /portfolio/upload** — Send Excel (`.xlsx`) with same columns, or broker statement (e.g. Groww holdings export). | Same as step 2. With LLM key, any broker format is parsed via portfolio_parse_agent; without key, rule-based parser requires recognizable headers (Symbol/Trading Symbol, Quantity/Qty, etc.). |
+| 4 | **POST /portfolio/rebalance** — Body: `{ "holdings": [ {"symbol":"RELIANCE","quantity":10,"value":25000}, {"symbol":"TCS","quantity":5,"value":17500} ], "strategy": "full" }`. | 200; `current_weights`, `target_weights` (equal weight if no target_allocation), `trades` array with symbol, action (buy/sell), amount, quantity. |
+| 5 | **POST /portfolio/rebalance** — Same holdings, `"strategy": "bands", "band_pct": 0.05`. | 200; trades only where drift > 5% (or empty if within bands). |
+| 6 | **POST /portfolio/run** — Body: `{ "amount": 100000, "algo_ids": ["momentum"] }`. | 200 if broker/LLM configured; otherwise may fail with missing credentials. Response: `results` array with symbol, suggestion, confidence, suggested_quantity/amount. |
+| 7 | **GET /portfolio/last-run** — After a successful run. | 200; same shape as last POST /portfolio/run response. |
 
 #### 2.3.1 LLM portfolio dashboard (analysis_html)
 
 | Step | Action | Expected |
 |------|--------|----------|
 | 1 | **Without** LLM API key (no `OPENAI_API_KEY` when provider is openai, or no `ANTHROPIC_API_KEY` when provider is anthropic): POST /portfolio/upload with valid CSV/Excel. | 200; `feedback.analysis_html` is null; `feedback.summary` and `feedback.suggestions` present. |
-| 2 | **With** the configured provider key set in `backend/.env` (e.g. `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` per `config.yaml` llm.provider): POST /portfolio/upload with valid file (e.g. 2–5 holdings). | 200; `feedback.analysis_html` is a non-empty string (HTML fragment). |
+| 2 | **With** the configured provider key set in `backend/.env` (e.g. `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` per `config.yaml` agents.default provider): POST /portfolio/upload with valid file (e.g. 2–5 holdings). | 200; `feedback.analysis_html` is a non-empty string (HTML fragment). |
 | 3 | In the frontend, Existing portfolio → upload same file with API key set. | A **Report** section appears below suggestions; dashboard HTML renders inside the scrollable container (no script execution; DOMPurify sanitization applied). |
 
 ### 2.4 Algos APIs
@@ -93,6 +94,8 @@ Manual and automated testing procedures for the Smart Algo Trading project. Use 
   - Analyzer: call `analyze(holdings)` from `app.services.portfolio.analyzer`; assert `total_value`, `sector_mix`, `holdings` with `value` and `weight_pct`.
   - Feedback builder: call `build_feedback(analysis)` from `app.services.portfolio.feedback_builder`; assert response has `summary`, `suggestions`, and `analysis_html` (null when no LLM API key for configured provider; optional assertion that `run_portfolio_research(analysis)` returns None when key is unset).
 - **API tests**: Use FastAPI `TestClient`; requires `httpx` (`pip install httpx`). Example: `client.post("/portfolio/rebalance", json={...})` and assert status 200 and response keys.
+- **Run all backend tests**: From `backend/` run `pytest -v` or `python -m pytest tests/ -v` (if any tests exist). Requires `pytest` (see `backend/requirements.txt`).
+- **Parser agent (direct test)**: From `backend/` run `./tests/test_run.sh parser_agent` (activates venv and runs the test); from repo root run `./backend/tests/test_run.sh parser_agent`. Or from `backend/` run `python tests/test_parser_agent.py`. Writes to `tests/output/parser_agent_io_<timestamp>.txt`: **system instruction**, **user message**, and **agent output** (structured JSON, `PortfolioParseResult`). Run `./tests/test_run.sh` with no arguments to see options. Optional: place `tests/data/groww_Stocks_Holdings_Statement.xlsx` (copy from Downloads) to include the Groww sample.
 
 ### 3.2 Frontend
 
@@ -141,10 +144,10 @@ Expected: `current_weights` ~58.8% / 41.2%, `target_weights` 50% / 50%, `trades`
 |-------|--------|
 | Backend import errors | Ensure you are in `backend/` with `.venv` activated and `pip install -r requirements.txt` was run. |
 | CORS errors from frontend | Backend must allow origin of frontend (e.g. `http://localhost:5173`); see `app.main` CORS middleware. |
-| 422 on upload | Ensure CSV/Excel has headers (e.g. symbol, quantity); optional: avg_cost, value. |
+| 422 on upload | Ensure CSV/Excel has headers (e.g. symbol, quantity); optional: avg_cost, value. With LLM API key set, upload uses portfolio_parse_agent and accepts any broker format (Groww, Zerodha, Dhan, etc.); without key, rule-based parser expects recognizable column names. |
 | 422 on rebalance | Body must include `holdings` array; each item: `symbol`, `quantity`, and either `value` or `avg_cost`. |
 | Empty algo results | Broker credentials and (for scoring) OpenAI API key must be set; check `config/algos.yaml` watchlist and `config/symbols.yaml` for symbol→security_id mapping (Dhan). |
-| No Report / analysis_html after upload | Set the LLM provider API key in `backend/.env` (`OPENAI_API_KEY` for OpenAI or `ANTHROPIC_API_KEY` for Anthropic, per `config.yaml` llm.provider). Ensure `backend/app/agents/portfolio_research_agent/` exists (system_instructions.md, config.yaml). Frontend sanitizes HTML with DOMPurify; if Report is empty, check browser console for errors. |
+| No Report / analysis_html after upload | Set the LLM provider API key in `backend/.env` (`OPENAI_API_KEY` for OpenAI or `ANTHROPIC_API_KEY` for Anthropic, per `config.yaml` agents.default provider). Ensure `backend/app/agents/portfolio_research_agent/` exists (system_instructions.md, config.yaml). Frontend sanitizes HTML with DOMPurify; if Report is empty, check browser console for errors. |
 
 ---
 

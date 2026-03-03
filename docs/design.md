@@ -77,7 +77,7 @@ flowchart TB
 - **HTTP**: REST; JSON request/response
 - **Broker / market data**: Provider-agnostic interface; first implementation: Dhan (official `dhanhq` client).
 - **News**: HTTP client + Serper/Google/Bing API (or similar)
-- **LLM**: **Vendor-agnostic** via **AGNO** (Agno) framework; supported providers: OpenAI, Anthropic. Config: `config/config.yaml` → `llm.provider` (openai | anthropic), `llm.default_model`; secrets in env: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`. Structured output (JSON) via Pydantic.
+- **LLM**: **Vendor-agnostic** via **AGNO** (Agno) framework; supported providers: OpenAI, Anthropic. Config: `config/config.yaml` → `agents.default` (provider, model); secrets in env: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`. Structured output (JSON) via Pydantic.
 - **Config**: **Secrets** (broker tokens, API keys) in **env only**. **Non-secret options** (e.g. `broker.provider`) in global `backend/config/config.yaml`; optional YAML for watchlists, algo metadata (`config/algos.yaml`).
 - **Agents**: AGNO framework (Agno) for LLM agents; Pydantic for structured JSON response design; BaseAgent pattern with global config and per-agent override (see §2.2.1).
 
@@ -106,6 +106,16 @@ The backend uses the **AGNO framework** (Agno) for AI/LLM agents and **Pydantic*
 - **Option B — Global only**: No per-agent config.yaml for overrides. The **global config file** has a section (e.g. `agents: { scoring_agent: { model: "...", temperature: 0.2 }, feedback_agent: { ... } }`) listing each agent name and its override params. Single place to manage all agents.
 - **Recommended — Hybrid**: **Global config** holds defaults and optionally a central **agent registry** (agent_name → override params). **Per-agent config.yaml** may override those (model, temperature, etc.) for that agent. **Resolution order**: global defaults → central agent overrides (if present) → per-agent config.yaml (if present); later wins. So you can use only global, only per-agent, or both; per-agent overrides take precedence when both exist.
 
+**Config precedence (which file wins)**
+
+| Layer | File | Purpose |
+|-------|------|---------|
+| App | `config/config.yaml` | Broker provider and **agents.default** (provider, model, temperature, max_tokens). Single source for app and agent LLM defaults. |
+| App | `.env` | API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY), broker tokens. Provider and model are in config only. |
+| Per-agent | `agents/<agent_name>/config.yaml` | **Overrides** for that agent (provider, model, temperature, max_tokens, prompt params). **Takes precedence** over agents.default for any key present here. |
+
+When an agent does not set `provider` or `model`, the LLM factory falls back to Settings, which are populated from `agents.default` in config. See [config_agents.md](config_agents.md) for details and examples.
+
 **Redesign: prompts from .md, other info from config.yaml**
 
 - **Prompts (system instructions)** are stored in **.md** files per agent (e.g. `system_instructions.md` or `prompt.md` in the agent folder). Written in Markdown for the LLM to understand; can be static or a template with placeholders (e.g. `{{symbol}}`, `{{technical_summary}}`, `{{suggestion_enum}}`).
@@ -115,6 +125,7 @@ The backend uses the **AGNO framework** (Agno) for AI/LLM agents and **Pydantic*
 
 - **Each agent** has its own folder (e.g. `app/agents/<agent_name>/`).
 - Inside that folder:
+  - **agent.py**: the agent logic (loads prompt and config, uses BaseAgent to build LLM model and run, returns structured output). Entry point e.g. `run_scoring_agent()` or `run_portfolio_research()`.
   - **One or more .md files** for prompts: e.g. `system_instructions.md` (main system prompt). Optionally `user_prompt_template.md` or other prompt files if needed. Content is for the LLM; can be templated with placeholders.
   - **config.yaml**: agent-specific **non-prompt** config only — model, temperature, max_tokens, overrides, and any params that are injected into the prompt template (e.g. `suggestion_enum`, `confidence_range`, algo-specific keys). No `system_instructions` key; prompts live in .md.
 
@@ -133,20 +144,25 @@ The backend uses the **AGNO framework** (Agno) for AI/LLM agents and **Pydantic*
 **Example layout (prompts from .md, other from config.yaml)**
 
 ```
+backend/
+├── config/                         # App + agent defaults (config.yaml: broker, agents.default)
+│   ├── config.yaml
+│   ├── algos.yaml
+│   └── symbols.yaml
 backend/app/
-├── config/                         # Config module (global settings, global agent defaults)
+├── config/                         # Config module (settings.py, get_global_config)
 │   ├── __init__.py
-│   ├── settings.py
-│   ├── global_agent_config.yaml
-│   └── ...
+│   └── settings.py
 ├── agents/
-│   ├── base_agent.py                # BaseAgent: loads .md + config.yaml per agent
+│   ├── base_agent.py                # BaseAgent: loads .md + config.yaml, builds AGNO model (OpenAI/Anthropic), runs agent
 │   ├── scoring_agent/
 │   │   ├── system_instructions.md   # Prompt (Markdown, optional placeholders)
-│   │   └── config.yaml              # model, temperature, suggestion_enum, etc. (no prompt text)
-│   ├── feedback_agent/
+│   │   ├── config.yaml              # model, temperature, suggestion_enum, etc. (no prompt text)
+│   │   └── agent.py                 # run_scoring_agent()
+│   ├── portfolio_research_agent/
 │   │   ├── system_instructions.md
-│   │   └── config.yaml
+│   │   ├── config.yaml
+│   │   └── agent.py                 # run_portfolio_research()
 │   └── ...
 └── models/
     ├── responses.py
@@ -218,11 +234,12 @@ backend/
 │   ├── llm/                 # prompt templates, client, response parser (may use agents)
 │   ├── sizing/              # position sizing from portfolio and risk rules
 │   ├── models/              # Pydantic request/response models + agent response schemas
-│   ├── config/              # Config module: global settings, global_agent_config (for BaseAgent)
-│   └── agents/              # AGNO agents: BaseAgent + one folder per agent
-│       ├── base_agent.py    # BaseAgent: loads .md (prompts) + config.yaml (other) per agent
-│       ├── scoring_agent/   # system_instructions.md + config.yaml
-│       ├── feedback_agent/  # system_instructions.md + config.yaml
+│   ├── config/              # Config module: settings.py, get_global_config (agent defaults in config/config.yaml)
+│   └── agents/              # AGNO agents: BaseAgent + one folder per agent (each with agent.py)
+│       ├── base_agent.py    # BaseAgent: loads .md + config.yaml, builds vendor-agnostic AGNO model, runs agent
+│       ├── scoring_agent/  # system_instructions.md + config.yaml + agent.py
+│       ├── portfolio_parse_agent/   # LLM parse any broker CSV/Excel → holdings (fallback: rule-based parser)
+│       ├── portfolio_research_agent/
 │       └── ...
 ├── config/                  # watchlists, algo metadata, learning content (JSON/md)
 ├── requirements.txt
@@ -238,6 +255,7 @@ backend/
 | POST   | `/portfolio/investment` (or extended upload) | `{ "segments": [{ "asset_class", "value"?, "holdings"?: [] }] }` or multipart multi-asset file | `{ "total_value", "allocation": [{ "asset_class", "value", "pct" }], "feedback"? }` |
 | POST   | `/portfolio/run` | `{ "amount": number, "algo_ids"?: string[], "allocation"?: Record<string, number> }` (amount may be equity slice from investment) | `{ "results": [{ "symbol", "name", "suggestion", "confidence", "suggested_quantity"?, "suggested_amount"?, "last_price" }] }` |
 | GET    | `/portfolio/last-run` | - | Same as run result or 404 |
+| POST   | `/portfolio/parse` | multipart file (CSV/Excel) | `{ "holdings", "errors", "source": "llm" \| "rule_based", "holding_count" }` — parse-only for testing; same LLM/rule-based logic as upload, no analyze/feedback. |
 | POST   | `/portfolio/upload` | multipart file: stocks-only (symbol, quantity, …) or multi-asset (asset_class/type + value or holdings) | `{ "total_value", "holdings"?, "segments"?, "allocation"?, "feedback": { "summary", "suggestions", "analysis_html"? }, "sector_mix"?, "concentration" }` — `analysis_html`: LLM-generated dashboard HTML (equity-research style); see [llm-portfolio-dashboard.md](llm-portfolio-dashboard.md). |
 | POST   | `/portfolio/rebalance` | `{ "holdings": [{ "symbol", "quantity", "avg_cost"?, "value"? }], "target_allocation"?: Record<symbol, weight>, "strategy"?: "full"\|"bands", "band_pct"?: number }` — omit target for equal-weight. | `{ "current_weights", "target_weights", "trades": [{ "symbol", "action": "buy"\|"sell", "quantity"?, "amount" }] }` (stock-level; asset-class in Phase 3B) |
 
@@ -260,7 +278,7 @@ backend/
 
 - **Investment portfolio**: Accept multi-asset input (segments: asset_class + value/holdings) or multi-asset upload; return total value and allocation by asset_class (equity, debt, mutual_fund, gold, cash). Used for high-level view and as context for rebalancing and stocks deep-dive.
 - **Portfolio run**: Load config (watchlists per algo); for each selected algo, fetch data (broker OHLC/options, e.g. Dhan), run technical + optional news/LLM, get confidence + suggestion; apply sizing from amount and allocation; return aggregated results. Amount may be equity slice from investment view.
-- **Portfolio upload**: Parse CSV/Excel → stocks-only (holdings) or multi-asset (rows with asset_class/type and value or holdings); optionally resolve symbol to name/sector; compute total value, sector mix, concentration; build feedback; return. Multi-asset upload returns allocation by asset_class.
+- **Portfolio upload**: Parse CSV/Excel → stocks-only (holdings) or multi-asset (rows with asset_class/type and value or holdings). **Parse**: optional **LLM agent** (portfolio_parse_agent) parses any broker format (Groww, Zerodha, Dhan, etc.) from file content as text; on success use structured holdings; on failure or when LLM unavailable, **fallback** to rule-based parser (see [parser.py](backend/app/services/portfolio/parser.py)). Then optionally resolve symbol to name/sector; compute total value, sector mix, concentration; build feedback; return. Multi-asset upload returns allocation by asset_class.
 - **Rebalancing**: Input: current holdings and/or segments (asset-class level). Target allocation at **asset-class** level (e.g. equity 60%, debt 40%) and/or per-sector within equity. Compute current weights; compare to target; bands or calendar; output high-level trades (e.g. "add ₹X to equity") and, when equity holdings provided, stock-level trades (symbol, action, quantity or amount).
 - **Algos list/detail**: List: filter by segment from config. Detail: return static overview (from config) + stocks table (from last run or cache; refresh triggers run for that algo only).
 - **Learning**: Serve from config (e.g. `config/learning/cards.json` and markdown or HTML bodies); list and get by id.

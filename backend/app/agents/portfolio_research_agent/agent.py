@@ -2,8 +2,10 @@
 import re
 from typing import Any
 
-from app.agents.base_agent import get_effective_agent_config, load_agent_config
-from app.agents.llm_factory import run_agent_chat
+from app.agents.base_agent import BaseAgent
+
+AGENT_NAME = "portfolio_research_agent"
+_agent = BaseAgent(AGENT_NAME)
 
 
 def _format_analysis_for_prompt(analysis: dict[str, Any]) -> str:
@@ -53,28 +55,9 @@ def run_portfolio_research(analysis: dict[str, Any]) -> str | None:
     Load portfolio_research_agent prompt and config, send analyzer summary to LLM via AGNO (vendor-agnostic), return dashboard HTML.
     Returns None if agent config missing, no API key for configured provider, or LLM fails.
     """
-    try:
-        system_instructions, _ = load_agent_config("portfolio_research_agent")
-    except FileNotFoundError:
-        return None
-
-    effective = get_effective_agent_config("portfolio_research_agent")
-    provider = effective.get("provider")
-    model = effective.get("model")
-    temperature = float(effective.get("temperature", 0.3))
-    max_tokens = int(effective.get("max_tokens", 4096))
-
     context = _format_analysis_for_prompt(analysis)
-    raw = run_agent_chat(
-        system_instructions=system_instructions,
-        user_message=f"Generate the dashboard HTML for this portfolio:\n\n{context}",
-        provider=provider,
-        model_id=model,
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-    if not raw:
+    raw = _agent.run(f"Generate the dashboard HTML for this portfolio:\n\n{context}")
+    if not raw or not isinstance(raw, str):
         return None
-
     html = _extract_html_from_response(raw)
     return html if html else None

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     broker_provider: str = "dhan"
     dhan_access_token: str = ""
     dhan_client_id: str = ""
-    # LLM: vendor-agnostic (AGNO); provider + model + keys
+    # LLM: populated from config (agents.default) in get_settings(); do not set in .env
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
     openai_api_key: str = ""
@@ -40,14 +40,19 @@ def _load_global_config() -> dict:
         return yaml.safe_load(f) or {}
 
 
+def get_global_config() -> dict:
+    """Return the full app config dict from config/config.yaml (same file as used by get_settings)."""
+    return _load_global_config()
+
+
 def get_settings() -> Settings:
     s = Settings()
     cfg = _load_global_config()
     if cfg.get("broker", {}).get("provider"):
         s.broker_provider = (cfg["broker"].get("provider") or s.broker_provider).strip().lower()
-    llm = cfg.get("llm") or {}
-    if llm.get("provider"):
-        s.llm_provider = (llm.get("provider") or s.llm_provider).strip().lower()
-    if llm.get("default_model"):
-        s.llm_model = (llm.get("default_model") or s.llm_model).strip()
+    agents_default = cfg.get("agents", {}).get("default") or {}
+    if agents_default.get("provider"):
+        s.llm_provider = (agents_default.get("provider") or s.llm_provider).strip().lower()
+    if agents_default.get("model"):
+        s.llm_model = (agents_default.get("model") or s.llm_model).strip()
     return s

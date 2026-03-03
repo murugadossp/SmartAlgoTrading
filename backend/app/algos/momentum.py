@@ -1,7 +1,7 @@
 """Momentum algo: watchlist → OHLC → technicals → scoring agent → list of { symbol, suggestion, confidence }."""
 from typing import Any
 
-from app.agents.run_scoring import run_scoring_agent
+from app.agents.scoring_agent.agent import run_scoring_agent
 from app.analysis.technical import compute_technical_view, technical_summary_for_prompt
 from app.algos.loader import get_watchlist
 from app.services.market_data import get_ohlc_for_symbols

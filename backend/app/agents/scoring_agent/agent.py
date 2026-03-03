@@ -1,11 +1,13 @@
-"""Run scoring agent: load prompt from scoring_agent, substitute placeholders, call LLM via AGNO, return AlgoScoringResponse."""
+"""Scoring agent: load prompt from this folder, substitute placeholders, call LLM via AGNO, return AlgoScoringResponse."""
 import json
 import re
 from typing import Any
 
-from app.agents.base_agent import get_effective_agent_config, load_agent_config
-from app.agents.llm_factory import run_agent_chat
+from app.agents.base_agent import BaseAgent
 from app.models.responses import AlgoScoringResponse
+
+AGENT_NAME = "scoring_agent"
+_agent = BaseAgent(AGENT_NAME)
 
 
 def _substitute_prompt(template: str, symbol: str, technical_summary: str, news_summary: str, config: dict[str, Any]) -> str:
@@ -50,26 +52,13 @@ def run_scoring_agent(
     If no API key for configured provider or LLM fails, returns a stub response (Hold, 50, "No LLM available").
     """
     try:
-        system_instructions, config = load_agent_config("scoring_agent")
+        system_instructions, config = BaseAgent.load_agent_config(AGENT_NAME)
     except FileNotFoundError:
         return AlgoScoringResponse(confidence=50, suggestion="Hold", reasoning="Scoring agent config not found.")
 
     prompt = _substitute_prompt(system_instructions, symbol, technical_summary, news_summary, config)
-    effective = get_effective_agent_config("scoring_agent")
-    provider = effective.get("provider")
-    model = effective.get("model")
-    temperature = effective.get("temperature", 0.2)
-    max_tokens = effective.get("max_tokens", 256)
-
-    content = run_agent_chat(
-        system_instructions=prompt,
-        user_message=f"Score symbol: {symbol}. Return JSON only.",
-        provider=provider,
-        model_id=model,
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-    if not content:
+    content = _agent.run(f"Score symbol: {symbol}. Return JSON only.", instructions_override=prompt)
+    if not content or not isinstance(content, str):
         return AlgoScoringResponse(confidence=50, suggestion="Hold", reasoning="No LLM available or LLM call failed.")
 
     parsed = _parse_json_from_response(content)

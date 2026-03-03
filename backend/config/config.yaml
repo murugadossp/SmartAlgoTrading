@@ -7,7 +7,11 @@ broker:
   #   request_timeout: 30
   #   rate_limit_per_sec: 5
 
-# LLM: vendor-agnostic (AGNO). Provider and default model; API keys in .env (OPENAI_API_KEY, ANTHROPIC_API_KEY).
-llm:
-  provider: openai   # openai | anthropic
-  default_model: "gpt-4o-mini"
+# Agent defaults: provider, model, temperature, max_tokens. Also used as app-level LLM default (Settings fallback).
+# Per-agent config.yaml overrides these. API keys in .env (OPENAI_API_KEY, ANTHROPIC_API_KEY).
+agents:
+  default:
+    provider: openai   # openai | anthropic; each agent can override in its own config.yaml
+    model: "gpt-5-mini"
+    temperature: 0.2
+    max_tokens: 128000

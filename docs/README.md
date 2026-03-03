@@ -13,6 +13,7 @@ This folder contains the project documentation derived from the product plan.
 | [llm-portfolio-dashboard.md](llm-portfolio-dashboard.md) | LLM portfolio analysis: equity-research-style HTML dashboard, API shape, frontend rendering. |
 | [setup.md](setup.md) | **Setup and dev environment**: Python 3.12, virtual env at `backend/.venv`. |
 | [testprocess.md](testprocess.md) | **Test process**: manual and automated testing (backend, frontend, APIs, E2E). |
+| [config_agents.md](config_agents.md) | **Config and agents**: single config file, agents.default, per-agent overrides (including provider), precedence, and examples. |
 | [modern-ui-theme-plan.md](modern-ui-theme-plan.md) | Frontend UI plan: theme (light/dark), card-based layout, header, typography. |
 
 ## Project layout

@@ -1,0 +1,201 @@
+========== System instruction (sent to agent) ==========
+# Portfolio Parse Agent — Extract holdings from any broker file
+
+You are a parser for equity portfolio holdings. You receive the raw content of a portfolio file (CSV or table from Excel) from **any broker** (e.g. Groww, Zerodha, Dhan, Upstox, or others). Your task is to extract **every equity/stock holding** and return a structured list.
+
+## Input
+
+- The user message will contain the file content: either CSV text or a table (CSV-style) from the first sheet of an Excel file.
+- The filename may be provided for context (e.g. "Stocks_Holdings_Statement_....xlsx") so you can infer broker or format.
+
+## Output
+
+Return **only** a JSON object that conforms to the required schema:
+
+- **holdings**: Array of objects. Each object must have:
+  - **symbol** (string): The exact stock/symbol identifier from the file (e.g. RELIANCE, TCS, INFY).
+  - **quantity** (integer): Number of shares/units. Must be at least 1. Skip or omit rows with zero or missing quantity.
+  - **avg_cost** (number or null): Average cost per unit if present in the file; otherwise omit or null.
+  - **value** (number or null): Current value, book value, or market value if present; otherwise omit or null.
+- **errors** (array of strings or null): Optional. List any parse warnings, e.g. skipped non-equity rows (mutual funds, cash, etc.) or unreadable rows.
+
+## Rules
+
+- Extract **only equity/stock holdings**. Ignore rows that are clearly mutual funds, bonds, cash, or other asset types unless the file contains only equities.
+- Use the **exact symbol strings** from the file (same casing and spelling).
+- If a column clearly represents quantity (e.g. "Quantity", "Qty", "Balance Qty", "Shares"), use it for `quantity`.
+- If the file has both average price and value, prefer mapping to **avg_cost** and **value** when available; otherwise derive or leave null.
+- If the file has multiple tables or sections, extract holdings from the main equity holdings table only.
+- Do not invent or hallucinate rows; only include rows that appear in the input.
+
+========== Run 1: Simple CSV ==========
+--- User message (sent to agent) ---
+symbol,quantity
+RELIANCE,10
+
+--- Agent output (structured JSON, PortfolioParseResult / AGNO + Pydantic) ---
+{
+  "holdings": [
+    {
+      "symbol": "RELIANCE",
+      "quantity": 10,
+      "avg_cost": null,
+      "value": null
+    }
+  ],
+  "errors": null
+}
+
+========== Run 2: Groww statement ==========
+--- User message (sent to agent) ---
+Filename: groww_Stocks_Holdings_Statement.xlsx
+
+Name,Sathya Priyadarshini Murugadoss,,,,,,
+Unique Client Code,2580496094,,,,,,
+,,,,,,,
+Holdings statement for stocks as on 02-03-2026,,,,,,,
+,,,,,,,
+Summary,,,,,,,
+Invested Value,1330677.44,,,,,,
+Closing Value,1280851.75,,,,,,
+Unrealised P&L,-49825.69,,,,,,
+,,,,,,,
+Stock Name,ISIN,Quantity,Average buy price,Buy value,Closing price,Closing value,Unrealised P&L
+APOLLO TYRES LTD,INE438A01022,291.0,463.97,135015.27,440.4,128156.4,-6858.87
+BHARAT ELECTRONICS LTD,INE263A01024,10.0,407.15,4071.5,453.95,4539.5,468.0
+BHARTI AIRTEL LIMITED,INE397D01024,40.0,1901.56,76062.4,1873.2,74928.0,-1134.4
+BHEL,INE257A01026,10.0,244.7,2447.0,262.15,2621.5,174.5
+DLF LIMITED,INE271C01023,261.0,654.0,170694.0,590.2,154042.2,-16651.8
+ETERNAL LIMITED,INE758T01015,315.0,260.11,81934.65,242.87,76504.05,-5430.6
+GROWWAMC - GROWWSLVR,INF666M01OF4,800.0,23.51,18808.0,28.2,22560.0,3752.0
+HDFC BANK LTD,INE040A01034,26.0,892.24,23198.24,879.4,22864.399999999998,-333.84
+HINDALCO  INDUSTRIES  LTD,INE038A01020,2.0,906.2,1812.4,940.0,1880.0,67.6
+HINDUSTAN AERONAUTICS LTD,INE066F01020,38.0,4054.58,154074.04,3951.6,150160.8,-3913.24
+HINDUSTAN COPPER LTD,INE531E01026,150.0,564.35,84652.5,576.0,86400.0,1747.5
+HINDUSTAN ZINC LIMITED,INE267A01025,5.0,566.6,2833.0,617.65,3088.25,255.25
+ICICI BANK LTD.,INE090A01021,40.0,1391.91,55676.4,1374.0,54960.0,-716.4
+ICICI PRUDENTIAL GOLD ETF,INF109KC1NT3,283.0,126.78,35878.74,143.55,40624.65,4745.91
+ICICIPRAMC - ICICISILVE,INF109KC1Y56,100.0,242.63,24263.0,286.29,28629.000000000004,4366.0
+INFOSYS LIMITED,INE009A01021,40.0,1482.12,59284.8,1288.9,51556.0,-7728.8
+ITC LTD,INE154A01025,225.0,309.85,69716.25,314.9,70852.5,1136.25
+RELIANCE INDUSTRIES LTD,INE002A01018,10.0,1352.4,13524.0,1358.0,13580.0,56.0
+SWIGGY LIMITED,INE00H001014,140.0,312.38,43733.2,289.0,40460.0,-3273.2
+TATA CONSULTANCY SERV LT,INE467B01029,70.0,2839.43,198760.1,2613.5,182945.0,-15815.1
+WIPRO LTD,INE075A01022,350.0,212.07,74224.5,198.57,69499.5,-4725.0
+
+--- Agent output (structured JSON, PortfolioParseResult / AGNO + Pydantic) ---
+{
+  "holdings": [
+    {
+      "symbol": "APOLLO TYRES LTD",
+      "quantity": 291,
+      "avg_cost": 463.97,
+      "value": 128156.4
+    },
+    {
+      "symbol": "BHARAT ELECTRONICS LTD",
+      "quantity": 10,
+      "avg_cost": 407.15,
+      "value": 4539.5
+    },
+    {
+      "symbol": "BHARTI AIRTEL LIMITED",
+      "quantity": 40,
+      "avg_cost": 1901.56,
+      "value": 74928.0
+    },
+    {
+      "symbol": "BHEL",
+      "quantity": 10,
+      "avg_cost": 244.7,
+      "value": 2621.5
+    },
+    {
+      "symbol": "DLF LIMITED",
+      "quantity": 261,
+      "avg_cost": 654.0,
+      "value": 154042.2
+    },
+    {
+      "symbol": "ETERNAL LIMITED",
+      "quantity": 315,
+      "avg_cost": 260.11,
+      "value": 76504.05
+    },
+    {
+      "symbol": "HDFC BANK LTD",
+      "quantity": 26,
+      "avg_cost": 892.24,
+      "value": 22864.4
+    },
+    {
+      "symbol": "HINDALCO  INDUSTRIES  LTD",
+      "quantity": 2,
+      "avg_cost": 906.2,
+      "value": 1880.0
+    },
+    {
+      "symbol": "HINDUSTAN AERONAUTICS LTD",
+      "quantity": 38,
+      "avg_cost": 4054.58,
+      "value": 150160.8
+    },
+    {
+      "symbol": "HINDUSTAN COPPER LTD",
+      "quantity": 150,
+      "avg_cost": 564.35,
+      "value": 86400.0
+    },
+    {
+      "symbol": "HINDUSTAN ZINC LIMITED",
+      "quantity": 5,
+      "avg_cost": 566.6,
+      "value": 3088.25
+    },
+    {
+      "symbol": "ICICI BANK LTD.",
+      "quantity": 40,
+      "avg_cost": 1391.91,
+      "value": 54960.0
+    },
+    {
+      "symbol": "INFOSYS LIMITED",
+      "quantity": 40,
+      "avg_cost": 1482.12,
+      "value": 51556.0
+    },
+    {
+      "symbol": "ITC LTD",
+      "quantity": 225,
+      "avg_cost": 309.85,
+      "value": 70852.5
+    },
+    {
+      "symbol": "RELIANCE INDUSTRIES LTD",
+      "quantity": 10,
+      "avg_cost": 1352.4,
+      "value": 13580.0
+    },
+    {
+      "symbol": "SWIGGY LIMITED",
+      "quantity": 140,
+      "avg_cost": 312.38,
+      "value": 40460.0
+    },
+    {
+      "symbol": "TATA CONSULTANCY SERV LT",
+      "quantity": 70,
+      "avg_cost": 2839.43,
+      "value": 182945.0
+    },
+    {
+      "symbol": "WIPRO LTD",
+      "quantity": 350,
+      "avg_cost": 212.07,
+      "value": 69499.5
+    }
+  ],
+  "errors": [
+    "Skipped non-equity rows: GROWWAMC - GROWWSLVR, ICICI PRUDENTIAL GOLD ETF, ICICIPRAMC - ICICISILVE."
+  ]
+}
