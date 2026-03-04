@@ -2,12 +2,18 @@
 Simple direct test for the portfolio parse agent: call the agent (no HTTP), log system instruction,
 user message, and structured agent output to tests/output/parser_agent_io_<timestamp>.txt.
 Output conforms to PortfolioParseResult (AGNO + Pydantic). Run from backend/: python tests/test_parser_agent.py
+Logs go to backend/logs/<date>/test/ when LOG_SESSION_ID=test (set by test_run.sh or below).
 """
 from __future__ import annotations
 
+import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
+
+# Use session_id "test" for log dir when running this script (logs/<date>/test/)
+os.environ.setdefault("LOG_SESSION_ID", "test")
 
 # Ensure backend app is importable when run as script
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
@@ -51,6 +57,7 @@ def main() -> None:
     log("--- User message (sent to agent) ---")
     log(SIMPLE_CSV)
     log("")
+    t0 = time.perf_counter()
     try:
         result1 = run_portfolio_parse(SIMPLE_CSV, "")
     except Exception as e:
@@ -65,6 +72,9 @@ def main() -> None:
         else:
             log("Agent returned None (check API key and config).")
         log("")
+    d1 = round(time.perf_counter() - t0, 2)
+    log(f"[Run 1 duration: {d1}s]")
+    log("")
 
     # Run 2: Groww statement (if file exists)
     if GROWW_SAMPLE.exists():
@@ -78,6 +88,7 @@ def main() -> None:
         log(f"Filename: {GROWW_SAMPLE.name}\n")
         log((content_text or "(empty)").strip())
         log("")
+        t1 = time.perf_counter()
         try:
             result2 = run_portfolio_parse(content_text or "", GROWW_SAMPLE.name)
         except Exception as e:
@@ -89,12 +100,16 @@ def main() -> None:
                 log(result2.model_dump_json(indent=2))
             else:
                 log("Agent returned None (check API key and config).")
+        d2 = round(time.perf_counter() - t1, 2)
+        log(f"[Run 2 duration: {d2}s]")
     else:
         log("(Groww sample not found at tests/data/groww_Stocks_Holdings_Statement.xlsx; skipping Run 2)")
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     output_file.write_text("\n".join(lines), encoding="utf-8")
     print("Report written to:", output_file)
+    if GROWW_SAMPLE.exists():
+        print("Durations: Run 1 (CSV) and Run 2 (Groww) are logged in the report; check backend/logs/<date>/test/app.log for agent.run() timing.")
 
 
 if __name__ == "__main__":

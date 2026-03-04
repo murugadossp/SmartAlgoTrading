@@ -1,21 +1,28 @@
-"""App logging: file under backend/logs/<app_start_timestamp>/ and optional console.
-User and session_id from context (default user="default"); set via set_log_context() (e.g. in middleware).
-Agent traces: append_agent_trace(payload) writes one JSON object per line to logs/.../agent_traces.json.
+"""App logging: file under backend/logs/<date>/<session_id>/ and optional console.
+Structure: logs/YYYY-MM-DD/<session_id>/app.log and agent_traces.json.
+Session_id: from env LOG_SESSION_ID (e.g. "test" when running tests), else generated once at first use.
+User and session_id in log lines/traces from set_log_context() (e.g. middleware).
 """
 from __future__ import annotations
 
 import contextvars
 import json
 import logging
+import os
 import sys
+import threading
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+_trace_lock = threading.Lock()
+
 # Backend root (parent of app/)
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
-# One directory per app/process start: logs/2026-03-04_011500Z/
-_APP_START_TS = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%SZ")
-_LOGS_DIR = _BACKEND_ROOT / "logs" / _APP_START_TS
+# logs/<date>/<session_id>/; session_id = LOG_SESSION_ID env (e.g. "test") or generated UUID
+_LOG_DATE = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+_PROCESS_SESSION_ID = (os.environ.get("LOG_SESSION_ID") or "").strip() or str(uuid.uuid4())
+_LOGS_DIR = _BACKEND_ROOT / "logs" / _LOG_DATE / _PROCESS_SESSION_ID
 _LOG_FILE = _LOGS_DIR / "app.log"
 _AGENT_TRACES_FILE = _LOGS_DIR / "agent_traces.json"
 
@@ -42,8 +49,13 @@ def get_log_context() -> tuple[str, str | None]:
 
 
 def get_app_start_timestamp() -> str:
-    """Return the app start timestamp used for the current log directory name."""
-    return _APP_START_TS
+    """Return the process session_id used for the current log directory (logs/<date>/<session_id>/)."""
+    return _PROCESS_SESSION_ID
+
+
+def get_log_dir_info() -> tuple[str, str]:
+    """Return (date, session_id) for the current log directory. Date is YYYY-MM-DD."""
+    return _LOG_DATE, _PROCESS_SESSION_ID
 
 
 class _UserSessionFilter(logging.Filter):
@@ -58,7 +70,7 @@ class _UserSessionFilter(logging.Filter):
 def get_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     """
     Return a logger with the given name. On first use, adds a file handler to
-    backend/logs/<app_start_timestamp>/app.log and a stream handler to stderr.
+    backend/logs/<date>/<session_id>/app.log and a stream handler to stderr.
     Log lines include user and session_id from context (set_log_context).
     """
     logger = logging.getLogger(name)
@@ -96,21 +108,73 @@ def get_logger(name: str, level: int = logging.INFO) -> logging.Logger:
 
 def append_agent_trace(payload: dict) -> None:
     """
-    Append one JSON-serializable trace object as a single line to
-    backend/logs/<app_start_timestamp>/agent_traces.json.
+    Append one trace object to the JSON array in
+    backend/logs/<date>/<session_id>/agent_traces.json.
+    File is a single JSON array: [ {...}, {...}, ... ], one element per agent invocation.
     Adds user and session_id from context (default user='default').
-    Each line: timestamp, agent_name, user, session_id, model_config, input, output.
+    Each element: start_time, end_time, duration, user, session_id, agent_name, model_config, input, output.
     Non-JSON-serializable values are coerced with default=str.
     """
     _ensure_logs_dir()
     user, session_id = get_log_context()
     full = {"user": user, "session_id": session_id, **payload}
-    try:
-        line = json.dumps(full, ensure_ascii=False, default=str) + "\n"
-        with open(_AGENT_TRACES_FILE, "a", encoding="utf-8") as f:
-            f.write(line)
-    except OSError:
-        pass
+    with _trace_lock:
+        try:
+            traces: list = []
+            if _AGENT_TRACES_FILE.exists():
+                with open(_AGENT_TRACES_FILE, encoding="utf-8") as f:
+                    raw = f.read().strip()
+                    if raw:
+                        try:
+                            traces = json.loads(raw)
+                            if not isinstance(traces, list):
+                                traces = [traces]
+                        except json.JSONDecodeError:
+                            # Migrate from JSONL (one object per line) to array
+                            for line in raw.split("\n"):
+                                line = line.strip()
+                                if line:
+                                    try:
+                                        traces.append(json.loads(line))
+                                    except json.JSONDecodeError:
+                                        pass
+            traces.append(full)
+            with open(_AGENT_TRACES_FILE, "w", encoding="utf-8") as f:
+                json.dump(traces, f, ensure_ascii=False, default=str, indent=2)
+        except OSError:
+            pass
+
+
+def update_agent_trace_by_id(trace_id: str, updates: dict) -> None:
+    """
+    Update the trace entry with the given trace_id with the keys from updates
+    (e.g. output, end_time, duration). Used after agent returns to complete the trace.
+    """
+    with _trace_lock:
+        try:
+            if not _AGENT_TRACES_FILE.exists():
+                return
+            with open(_AGENT_TRACES_FILE, encoding="utf-8") as f:
+                raw = f.read().strip()
+            if not raw:
+                return
+            try:
+                traces = json.loads(raw)
+            except json.JSONDecodeError:
+                return
+            if not isinstance(traces, list):
+                return
+            for i in range(len(traces) - 1, -1, -1):
+                if traces[i].get("trace_id") == trace_id:
+                    for k, v in updates.items():
+                        traces[i][k] = v
+                    break
+            else:
+                return
+            with open(_AGENT_TRACES_FILE, "w", encoding="utf-8") as f:
+                json.dump(traces, f, ensure_ascii=False, default=str, indent=2)
+        except OSError:
+            pass
 
 
 def trace_timestamp() -> str:

@@ -7,10 +7,12 @@ Usage:
 One-off run: BaseAgent(agent_name, output_schema=...).run(user_message)
 To load agent config (e.g. for prompt substitution): BaseAgent.load_agent_config(agent_name) or agent_config.load_agent_config(agent_name)
 """
+import time
+import uuid
 from typing import Any, TypeVar
 
 from app.config import agent_config
-from app.logger import append_agent_trace, get_logger, trace_timestamp
+from app.logger import append_agent_trace, get_logger, trace_timestamp, update_agent_trace_by_id
 
 T = TypeVar("T")
 logger = get_logger(__name__)
@@ -74,9 +76,9 @@ class BaseAgent:
             if not key:
                 raise ValueError("OpenAI provider requires OPENAI_API_KEY")
             from agno.models.openai import OpenAIResponses
-            # Some OpenAI models (e.g. o1, o3, gpt-5-mini) do not support temperature
+            # Some OpenAI models (e.g. o1, o3, gpt-5-mini, gpt-5-nano) do not support temperature
             supports_temperature = not any(
-                x in model.lower() for x in ("o1", "o3", "gpt-5-mini")
+                x in model.lower() for x in ("o1", "o3", "gpt-5-mini", "gpt-5-nano")
             )
             kwargs: dict[str, Any] = {"id": model, "api_key": key}
             if temperature is not None and supports_temperature:
@@ -146,9 +148,10 @@ class BaseAgent:
         """
         Run the agent with the given user message; return content (str or output_schema instance) or None.
         instructions_override: optional per-call override (e.g. substituted prompt); wins over constructor value.
-        Each run is logged as one JSON line in backend/logs/agent_traces.json (timestamp, agent_name, model_config, input, output).
+        Each run is logged as one JSON line in backend/logs/<date>/<session_id>/agent_traces.json (start_time, end_time, duration, agent_name, model_config, input, output).
         """
         start_time = trace_timestamp()
+        start_perf = time.perf_counter()
         user_message = user_message or ""
         system_instructions = ""
         model_config: dict[str, Any] = {}
@@ -167,10 +170,16 @@ class BaseAgent:
             else (self.instructions_override if self.instructions_override is not None else system_instructions)
         )
         trace_input = {"system_instructions": instructions, "user_message": user_message}
+        trace_id = str(uuid.uuid4())
 
         def _write_trace(output: Any) -> None:
+            end_time = trace_timestamp()
+            duration = round(time.perf_counter() - start_perf, 3)
             payload = {
-                "timestamp": start_time,
+                "trace_id": trace_id,
+                "start_time": start_time,
+                "end_time": end_time,
+                "duration": duration,
                 "agent_name": self.agent_name,
                 "model_config": model_config,
                 "input": trace_input,
@@ -184,23 +193,38 @@ class BaseAgent:
             logger.warning("run skipped: agent_name=%s (agent build returned None)", self.agent_name)
             _write_trace({"error": "agent build returned None"})
             return None
+        # Log trace with input only (output pending) so we know we've logged up to input
+        append_agent_trace({
+            "trace_id": trace_id,
+            "start_time": start_time,
+            "end_time": None,
+            "duration": None,
+            "agent_name": self.agent_name,
+            "model_config": model_config,
+            "input": trace_input,
+            "output": None,
+        })
+        logger.info("trace logged (input only, trace_id=%s); calling agent.run() ...", trace_id[:8])
+        agent_run_start = time.perf_counter()
         try:
             response = agent.run(user_message)
+            agent_run_elapsed = round(time.perf_counter() - agent_run_start, 3)
+            logger.info("agent.run() returned in %s s", agent_run_elapsed)
             if not response or not hasattr(response, "content"):
                 logger.warning("run empty response: agent_name=%s", self.agent_name)
-                _write_trace({"error": "empty response"})
+                update_agent_trace_by_id(trace_id, {"output": {"error": "empty response"}, "end_time": trace_timestamp(), "duration": round(time.perf_counter() - start_perf, 3)})
                 return None
             content = response.content
             if content is None:
                 logger.warning("run None content: agent_name=%s", self.agent_name)
-                _write_trace(None)
+                update_agent_trace_by_id(trace_id, {"output": None, "end_time": trace_timestamp(), "duration": round(time.perf_counter() - start_perf, 3)})
                 return None
             # Serialize output for trace (Pydantic model -> dict, else string; logger uses default=str for JSON)
             if hasattr(content, "model_dump"):
                 out_val: Any = content.model_dump()
             else:
                 out_val = str(content) if content is not None else None
-            _write_trace(out_val)
+            update_agent_trace_by_id(trace_id, {"output": out_val, "end_time": trace_timestamp(), "duration": round(time.perf_counter() - start_perf, 3)})
             if self.output_schema is not None and isinstance(content, self.output_schema):
                 logger.info("run success: agent_name=%s result_type=%s", self.agent_name, type(content).__name__)
                 return content
@@ -208,7 +232,7 @@ class BaseAgent:
             return content if isinstance(content, str) else str(content)
         except Exception as e:
             logger.exception("run failed: agent_name=%s error=%s", self.agent_name, e)
-            _write_trace({"error": str(e)})
+            update_agent_trace_by_id(trace_id, {"output": {"error": str(e)}, "end_time": trace_timestamp(), "duration": round(time.perf_counter() - start_perf, 3)})
             return None
 
     # ---------- Class method for getting raw AGNO Agent (e.g. for debugging) ----------

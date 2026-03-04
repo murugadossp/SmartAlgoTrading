@@ -1,5 +1,6 @@
 # Portfolio parse agent: extract holdings from any broker CSV/Excel via LLM
 provider: openai   # openai | anthropic; each agent can override in its own config.yaml
-model: "gpt-5-mini"
+# model: "gpt-5-mini"
+model: "gpt-5-nano"
 temperature: 0.2
 max_tokens: 128000

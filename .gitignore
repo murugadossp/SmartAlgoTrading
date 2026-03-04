@@ -40,5 +40,6 @@ Thumbs.db
 # Project
 backend/.cache/
 backend/logs/
+backend/tests/output/
 *.db
 *.sqlite
