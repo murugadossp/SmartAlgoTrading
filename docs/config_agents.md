@@ -147,5 +147,5 @@ ANTHROPIC_API_KEY=sk-ant-...
 ## 8. References
 
 - Backend config module: `app.config.settings` (`get_settings()`, `get_global_config()`).
-- Agent config loading: `app.agents.base_agent` (`load_global_agent_config()`, `get_effective_agent_config()`).
+- Agent config loading: `app.config.agent_config` (`get_global_agent_config()`, `load_agent_config(agent_name)`, `get_effective_agent_config(agent_name)`). `BaseAgent.load_agent_config(agent_name)` delegates to `agent_config.load_agent_config`.
 - Design: [design.md](design.md) §2.2.1 (Config precedence).
