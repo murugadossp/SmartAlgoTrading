@@ -5,7 +5,7 @@ Usage:
   agent = BaseAgent("portfolio_parse_agent", output_schema=PortfolioParseResult)
   result = agent.run(user_message)
 
-For one-off runs: BaseAgent.run_agent(agent_name, user_message, output_schema=..., **kwargs)
+One-off run: BaseAgent(agent_name, output_schema=...).run(user_message)
 To load agent config (e.g. for prompt substitution): BaseAgent.load_agent_config(agent_name)
 
 Config precedence: config/config.yaml (agents.default) then agents/<name>/config.yaml (per-agent wins).
@@ -15,7 +15,10 @@ from typing import Any, TypeVar
 
 import yaml
 
+from app.logger import get_logger
+
 T = TypeVar("T")
+logger = get_logger(__name__)
 
 
 class BaseAgent:
@@ -75,33 +78,64 @@ class BaseAgent:
         _, agent_cfg = self.load_agent_config(self.agent_name)
         return {**global_cfg, **(global_overrides or {}), **agent_cfg}
 
-    # ---------- AGNO model (Agent accepts "provider:model_id" and handles provider internally) ----------
+    # ---------- AGNO model: instantiate provider-specific model class, then Agent(model=...) ----------
 
     @classmethod
-    def _get_agno_model_str(
+    def _get_agno_model(
         cls,
         provider: str | None = None,
         model_id: str | None = None,
-    ) -> str:
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> Any:
         """
-        Return AGNO model string "provider:model_id" (e.g. "openai:gpt-4o-mini").
-        Agent class resolves provider and uses env API keys. Raises ValueError if API key is missing.
+        Return an AGNO model instance for the given provider (e.g. OpenAIResponses, Claude).
+        Agent is then used as Agent(model=model, instructions=..., ...). Raises ValueError if unsupported or API key missing.
         """
         from app.config.settings import get_settings
         settings = get_settings()
         prov = (provider or getattr(settings, "llm_provider", "openai") or "openai").strip().lower()
         model = (model_id or getattr(settings, "llm_model", None) or "gpt-4o-mini").strip()
-        # Fail fast if API key for this provider is not set
-        if prov == "openai" and not (getattr(settings, "openai_api_key", None) or "").strip():
-            raise ValueError("OpenAI provider requires OPENAI_API_KEY")
-        if prov == "anthropic" and not (getattr(settings, "anthropic_api_key", None) or "").strip():
-            raise ValueError("Anthropic provider requires ANTHROPIC_API_KEY")
-        return f"{prov}:{model}"
+
+        logger.info(
+            "model params: provider=%s model_id=%s temperature=%s max_tokens=%s",
+            prov, model, temperature, max_tokens,
+        )
+
+        if prov == "openai":
+            key = (getattr(settings, "openai_api_key", None) or "").strip()
+            if not key:
+                raise ValueError("OpenAI provider requires OPENAI_API_KEY")
+            from agno.models.openai import OpenAIResponses
+            # Some OpenAI models (e.g. o1, o3, gpt-5-mini) do not support temperature
+            supports_temperature = not any(
+                x in model.lower() for x in ("o1", "o3", "gpt-5-mini")
+            )
+            kwargs: dict[str, Any] = {"id": model, "api_key": key}
+            if temperature is not None and supports_temperature:
+                kwargs["temperature"] = temperature
+            if max_tokens is not None:
+                kwargs["max_output_tokens"] = max_tokens
+            return OpenAIResponses(**kwargs)
+
+        if prov == "anthropic":
+            key = (getattr(settings, "anthropic_api_key", None) or "").strip()
+            if not key:
+                raise ValueError("Anthropic provider requires ANTHROPIC_API_KEY")
+            from agno.models.anthropic import Claude
+            kwargs = {"id": model, "api_key": key}
+            if temperature is not None:
+                kwargs["temperature"] = temperature
+            if max_tokens is not None:
+                kwargs["max_tokens"] = max_tokens
+            return Claude(**kwargs)
+
+        raise ValueError(f"Unsupported LLM provider: {prov}. Use openai or anthropic.")
 
     def _get_agno_agent(self, instructions_override: str | None = None) -> Any:
         """
         Build and return AGNO Agent for this agent name with current options.
-        Returns None if config/model unavailable (e.g. missing API key).
+        Uses provider-specific model instance (e.g. OpenAIResponses(id="gpt-4o-mini")) then Agent(model=model, ...).
         """
         try:
             system_instructions, _ = self.load_agent_config(self.agent_name)
@@ -111,23 +145,27 @@ class BaseAgent:
             self.instructions_override if self.instructions_override is not None else system_instructions
         )
         effective = self._get_effective_config()
-        try:
-            model_str = self._get_agno_model_str(
-                provider=effective.get("provider"),
-                model_id=effective.get("model"),
-            )
-        except ValueError:
-            return None
-        from agno.agent import Agent
+        provider = effective.get("provider")
+        model_id = effective.get("model")
         temperature = float(effective.get("temperature", 0.2))
         max_tokens = int(effective.get("max_tokens", 1024))
-        kwargs: dict[str, Any] = {
-            "model": model_str,
-            "instructions": instructions,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            **self._extra,
-        }
+        logger.info(
+            "agent build: agent_name=%s provider=%s model_id=%s temperature=%s max_tokens=%s output_schema=%s",
+            self.agent_name, provider, model_id, temperature, max_tokens,
+            getattr(self.output_schema, "__name__", str(self.output_schema)) if self.output_schema else None,
+        )
+        try:
+            model = self._get_agno_model(
+                provider=provider,
+                model_id=model_id,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        except ValueError as e:
+            logger.warning("agent build failed (config/model): agent_name=%s error=%s", self.agent_name, e)
+            return None
+        from agno.agent import Agent
+        kwargs: dict[str, Any] = {"model": model, "instructions": instructions, **self._extra}
         if self.output_schema is not None:
             kwargs["output_schema"] = self.output_schema
         return Agent(**kwargs)
@@ -142,23 +180,30 @@ class BaseAgent:
         Run the agent with the given user message; return content (str or output_schema instance) or None.
         instructions_override: optional per-call override (e.g. substituted prompt); wins over constructor value.
         """
+        logger.info("run start: agent_name=%s user_message_len=%s", self.agent_name, len(user_message or ""))
         agent = self._get_agno_agent(instructions_override=instructions_override)
         if agent is None:
+            logger.warning("run skipped: agent_name=%s (agent build returned None)", self.agent_name)
             return None
         try:
             response = agent.run(user_message)
             if not response or not hasattr(response, "content"):
+                logger.warning("run empty response: agent_name=%s", self.agent_name)
                 return None
             content = response.content
             if self.output_schema is not None and isinstance(content, self.output_schema):
+                logger.info("run success: agent_name=%s result_type=%s", self.agent_name, type(content).__name__)
                 return content
             if content is None:
+                logger.warning("run None content: agent_name=%s", self.agent_name)
                 return None
+            logger.info("run success: agent_name=%s result_type=str", self.agent_name)
             return content if isinstance(content, str) else str(content)
-        except Exception:
+        except Exception as e:
+            logger.exception("run failed: agent_name=%s error=%s", self.agent_name, e)
             return None
 
-    # ---------- Class methods for one-off use (no need to hold an instance) ----------
+    # ---------- Class method for getting raw AGNO Agent (e.g. for debugging) ----------
 
     @classmethod
     def get_agno_agent(
@@ -171,24 +216,7 @@ class BaseAgent:
     ) -> Any:
         """
         Build and return an AGNO Agent for the given agent_name and options.
-        Returns None if config/model unavailable.
+        Returns None if config/model unavailable. For running, use BaseAgent(agent_name, ...).run(user_message).
         """
         instance = cls(agent_name, output_schema=output_schema, instructions_override=instructions_override, **extra_agent_kwargs)
         return instance._get_agno_agent(instructions_override=instructions_override)
-
-    @classmethod
-    def run_agent(
-        cls,
-        agent_name: str,
-        user_message: str,
-        *,
-        output_schema: type[T] | None = None,
-        instructions_override: str | None = None,
-        **extra_agent_kwargs: Any,
-    ) -> str | T | None:
-        """
-        One-off run: get agent for agent_name, run with user_message, return content.
-        If output_schema is set, returns validated Pydantic instance or None; otherwise response string or None.
-        """
-        instance = cls(agent_name, output_schema=output_schema, instructions_override=instructions_override, **extra_agent_kwargs)
-        return instance.run(user_message, instructions_override=instructions_override)
